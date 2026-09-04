@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Coach Hub" />
+  <title>Volleyball Coach Hub</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="stylesheet" href="./coach.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">VOLLEYBALL</div>
+        <h1 id="headerTitle">Coach Hub</h1>
+      </div>
+      <div class="topbar-actions">
+        <span id="offlineBadge" class="badge">Offline ready</span>
+        <button id="quickNewGame" class="btn primary compact">New Match</button>
+      </div>
+    </header>
+
+    <main id="main" class="main"></main>
+
+    <nav class="bottom-nav" aria-label="Coach Hub navigation">
+      <button class="nav-btn active" data-view="dashboard"><span>⌂</span><small>Home</small></button>
+      <button class="nav-btn" data-view="gameday"><span>🏐</span><small>Game Day</small></button>
+      <button class="nav-btn" data-view="roster"><span>👥</span><small>Roster</small></button>
+      <button class="nav-btn" data-view="stats"><span>▥</span><small>Stats</small></button>
+      <button class="nav-btn" data-view="team"><span>⚙</span><small>Team</small></button>
+    </nav>
+  </div>
+
+  <dialog id="modal" class="modal">
+    <form method="dialog" class="modal-shell">
+      <div class="modal-head">
+        <h2 id="modalTitle">Edit</h2>
+        <button class="icon-btn" value="cancel" aria-label="Close">✕</button>
+      </div>
+      <div id="modalBody"></div>
+    </form>
+  </dialog>
+
+  <input id="backupImport" type="file" accept="application/json,.json,.vball" hidden />
+  <script type="module" src="./coach.js"></script>
+</body>
+</html>

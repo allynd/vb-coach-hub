@@ -1,0 +1,10 @@
+{
+  "name": "Volleyball Coach Hub",
+  "short_name": "Coach Hub",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1020",
+  "theme_color": "#111827",
+  "description": "Offline-first volleyball roster, player profile, match and stat tracking for coaches."
+}
