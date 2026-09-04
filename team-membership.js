@@ -47,10 +47,11 @@ async function changeRole(teamId,userId,role){
 }
 
 async function removeMember(teamId,userId,name){
-  if(!confirm(`Remove ${name} from this team? Their Coach Hub account will lose cloud access to this team.`)) return;
+  if(!confirm(`Remove ${name} from this team? Their Coach Hub account will lose cloud access to this team.`)) return false;
   const supabase=await getClient();
   const {error}=await supabase.rpc('remove_team_member',{p_team_id:teamId,p_user_id:userId});
   if(error) throw error;
+  return true;
 }
 
 function findMembersList(card){
@@ -102,9 +103,9 @@ async function enhance(){
       btn.addEventListener('click',async()=>{
         btn.disabled=true;
         try{
-          await removeMember(ctx.team.id,btn.dataset.removeMember,btn.dataset.memberName||'this member');
-          list.dataset.membershipEnhanced='';
-          await enhance();
+          const removed=await removeMember(ctx.team.id,btn.dataset.removeMember,btn.dataset.memberName||'this member');
+          if(removed) btn.closest('.team-member-row')?.remove();
+          else btn.disabled=false;
         }catch(e){
           alert(/remove_team_member|function .* does not exist|schema cache/i.test(e.message||'')?'The Coach Hub 15.01 membership migration has not been applied to Supabase yet.':(e.message||String(e)));
           btn.disabled=false;
