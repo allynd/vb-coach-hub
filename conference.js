@@ -108,33 +108,41 @@ async function enhanceManualDialog(){
   const dialog=$('#manualResultDialog');
   if(!dialog?.open) return;
   const body=$('#manualResultBody',dialog);
-  const grid=$('.form-grid',body);
-  if(!grid || $('#manualConferenceType',body)) return;
+  if(!body) return;
+  const title=$('#manualResultTitle',dialog)?.textContent.trim()||'';
+  const isEdit=title==='Edit Manual Result';
   const state=await loadState();
-  const game=lastOpenedGameId ? (state?.games||[]).find(g=>g.id===lastOpenedGameId) : null;
-  grid.insertAdjacentHTML('beforeend',conferenceField('manualConferenceType',game?.conferenceType||'conference',false));
-  const save=$('#saveManualResult',body);
-  if(save && !save.dataset.conferenceEnhanced){
-    save.dataset.conferenceEnhanced='1';
-    save.addEventListener('click',async()=>{
-      const current=await loadState();
-      const pending={
-        kind:'manual',
-        gameId:game?.id||null,
-        teamId:current?.activeTeamId||game?.teamId||null,
-        opponent:$('#manualOpponent',body)?.value.trim()||game?.opponent||'',
-        date:$('#manualDate',body)?.value||game?.date||'',
-        type:$('#manualConferenceType',body)?.value||'conference'
-      };
-      sessionStorage.setItem('coachHubPendingConference',JSON.stringify(pending));
-      if(game?.id) await setGameConference(game.id,pending.type);
-    },true);
+  const game=isEdit && lastOpenedGameId ? (state?.games||[]).find(g=>g.id===lastOpenedGameId) : null;
+  const grid=$('.form-grid',body);
+
+  if(grid && !$('#manualConferenceType',body)){
+    grid.insertAdjacentHTML('beforeend',conferenceField('manualConferenceType',game?.conferenceType||'conference',false));
+    const save=$('#saveManualResult',body);
+    if(save && !save.dataset.conferenceEnhanced){
+      save.dataset.conferenceEnhanced='1';
+      save.addEventListener('click',async()=>{
+        const current=await loadState();
+        const pending={
+          kind:'manual',
+          gameId:game?.id||null,
+          teamId:current?.activeTeamId||game?.teamId||null,
+          opponent:$('#manualOpponent',body)?.value.trim()||game?.opponent||'',
+          date:$('#manualDate',body)?.value||game?.date||'',
+          type:$('#manualConferenceType',body)?.value||'conference'
+        };
+        sessionStorage.setItem('coachHubPendingConference',JSON.stringify(pending));
+        if(game?.id) await setGameConference(game.id,pending.type);
+      },true);
+    }
   }
 
   // Manual result summary: display the match classification.
-  if(!$('#manualConferenceBadge',body) && game){
-    const note=body.querySelector('p.muted');
-    note?.insertAdjacentHTML('beforebegin',`<div id="manualConferenceBadge" class="badge visible-badge">${conferenceLabel(game.conferenceType)}</div>`);
+  if(!grid && !$('#manualConferenceBadge',body) && lastOpenedGameId){
+    const summaryGame=(state?.games||[]).find(g=>g.id===lastOpenedGameId);
+    if(summaryGame){
+      const note=body.querySelector('p.muted');
+      note?.insertAdjacentHTML('beforebegin',`<div id="manualConferenceBadge" class="badge visible-badge">${conferenceLabel(summaryGame.conferenceType)}</div>`);
+    }
   }
 }
 
