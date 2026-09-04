@@ -1,18 +1,17 @@
 # Coach Hub — Supabase Setup
 
-Coach Hub remains offline-first on each device, but Supabase adds accounts and shared cloud data.
+Coach Hub remains offline-first on each device. Supabase adds accounts, cloud backup/restore, and the shared data layer needed for multi-coach use.
 
-## 1. Let the database migration deploy
+## 1. Apply the database migrations
 
-This repo now contains:
+This repo currently contains:
 
-`supabase/migrations/20260904114500_initial_coach_hub_cloud.sql`
+- `supabase/migrations/20260904114500_initial_coach_hub_cloud.sql`
+- `supabase/migrations/20260904140000_full_cloud_sync.sql`
 
-If the Supabase GitHub integration is configured to deploy migrations from `main`, confirm that migration succeeds in Supabase before testing cloud features.
+Apply both migrations to the production Supabase project in order. If the GitHub integration is configured to deploy migrations from `main`, confirm both succeed before testing 14.00. Otherwise use the normal Supabase CLI workflow (`supabase link` + `supabase db push`).
 
-If the integration is not applying migrations automatically, use the Supabase CLI workflow (`supabase link` + `supabase db push`) rather than manually maintaining a separate schema.
-
-The migration creates:
+The initial migration creates:
 
 - `profiles`
 - `teams`
@@ -24,82 +23,94 @@ The migration creates:
 - `substitutions`
 - `stat_events`
 
-It also enables Row Level Security and defines the initial roles:
+The 14.00 migration adds:
+
+- `team_snapshots` — exact per-team JSON safety snapshot
+- private `team-media` Storage bucket — team logos and player photos
+- Storage RLS policies tied to Coach Hub team membership
+
+The role model is:
 
 - `owner`
 - `coach`
 - `scorekeeper`
 - `viewer`
 
-## 2. Configure the browser client
+## 2. Browser client configuration
 
-Open `supabase-config.js` and fill in:
+`supabase-config.js` contains the project's Supabase URL and **publishable** browser key.
 
-```js
-export const SUPABASE_URL = 'https://YOUR_PROJECT_REF.supabase.co';
-export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_...';
-```
+Never put a Supabase secret key or legacy `service_role` key in this public repository. Coach Hub relies on Row Level Security instead.
 
-Find both values in Supabase **Connect** (or **Settings → API Keys**).
+## 3. Authentication URLs
 
-### Security warning
+In Supabase open **Authentication → URL Configuration**.
 
-Use only the **publishable** browser key.
-
-Never put a Supabase secret key or legacy `service_role` key in this repo. Coach Hub is a public browser application; the database is protected with RLS instead of hiding the publishable key.
-
-## 3. Configure Auth URLs
-
-In Supabase go to **Authentication → URL Configuration**.
-
-Set the production Site URL to:
+Use:
 
 `https://allynd.github.io/vb-coach-hub/`
 
-Add the same URL to the allowed Redirect URLs.
+for the Site URL and add the same URL to allowed Redirect URLs.
 
-This is important if email confirmation is enabled because Supabase uses the Site URL as the default destination after account confirmation.
+Coach Hub also explicitly supplies that URL when sending signup confirmation emails.
 
-## 4. Test account creation
+## 4. Full Sync in Coach Hub 14.00
 
-After GitHub Pages deploys Coach Hub v11:
+After the app shows build `14.00`:
 
-1. Open Coach Hub online.
-2. Confirm the build badge shows `v11`.
-3. Open **Team**.
-4. Find **Cloud & Accounts**.
-5. Create a test coach account.
-6. If email confirmation is enabled, confirm the account from the email and return to Coach Hub.
-7. Sign in.
+1. Sign into **Team → Cloud & Accounts**.
+2. Keep the desired local team active.
+3. Export a normal Coach Hub backup before the first migration.
+4. Tap **Full Sync Active Team**.
+5. Confirm the completion message lists players, matches, sets, substitutions, and stat events.
+6. Confirm the team appears under **My Cloud Teams**.
 
-## 5. Test the first cloud team
+Full Sync uploads:
 
-While signed in:
+- team metadata
+- roster/player profiles
+- manual and stat-tracked matches
+- set scores
+- submitted/current lineups
+- libero assignments and replacement state
+- substitution history
+- stat events
+- conference/non-conference classification
+- home/away/neutral and venue information
+- team logo
+- player photos
+- an exact JSON safety snapshot of the team's non-image local state
 
-1. Choose an existing local team.
-2. Open **Team → Cloud & Accounts**.
-3. Tap **Upload / Refresh Active Team**.
-4. Coach Hub creates the cloud team, adds the current account as `owner`, and uploads the roster.
-5. Confirm the team appears under **My Cloud Teams**.
+## 5. Restore test
 
-On another browser/device, sign into the same account and use **Download** to pull that team and roster onto the device.
+On another browser/device signed into the same account:
 
-This first phase deliberately syncs only team metadata and roster data. Match, set, lineup, substitution, and stat-event synchronization will be added after account/team access is verified.
+1. Open **Team → Cloud & Accounts**.
+2. Choose **Restore** beside the cloud team.
+3. Coach Hub replaces only that team's local copy.
+4. Other teams stored on the device remain untouched.
 
-## 6. Current data ownership model
+The restored team should include roster, matches, stats, lineups, substitutions, logo, and player photos.
 
-- **IndexedDB** remains the local/offline working database.
-- **Supabase** becomes the shared cloud/canonical database as sync coverage expands.
-- The app is still usable without internet.
+## 6. Current synchronization model
+
+14.00 is intentionally a **full-team snapshot sync**, not yet a realtime multi-writer engine.
+
+- IndexedDB is still the local/offline working database.
+- **Full Sync Active Team** makes the cloud copy match the active local team.
+- **Restore** replaces that team's local copy with the last successful cloud state.
 - Cloud operations require connectivity.
+- Normal stat entry remains fully usable offline.
+
+Do not have two coaches independently edit the same team and then both press Full Sync yet. Conflict-aware multi-coach synchronization is the next phase.
 
 ## Next phase
 
-Once account creation and team/roster upload/download are verified, the next implementation should add:
+The next cloud phase should add:
 
-1. Coach invitations and team membership management.
-2. Cloud match/set/lineup synchronization.
-3. Event-level stat synchronization with offline queues.
-4. Realtime updates for multiple coaches.
-5. Cloud-backed deletion tombstones so deletes propagate cleanly to offline devices.
-6. Full CSV/report exports from normalized cloud/local data.
+1. Coach invitations and membership management.
+2. Per-record sync metadata/tombstones.
+3. Offline sync queue.
+4. Conflict-aware event synchronization.
+5. Realtime updates for multiple coaches.
+6. Professional CSV/report exports.
