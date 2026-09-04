@@ -6,5 +6,5 @@
 // - NEVER put a Supabase secret key / service_role key in this file or anywhere in this public repo.
 //
 // Supabase Dashboard -> Connect (or Settings -> API Keys)
-export const SUPABASE_URL = '';
-export const SUPABASE_PUBLISHABLE_KEY = '';
+export const SUPABASE_URL = 'https://ajsqnyimcqemaznsivzn.supabase.co';
+export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_2KBrRKKmcumZVYObsKwbUw_Nij-SjkU';
