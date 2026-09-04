@@ -1,0 +1,34 @@
+.recent-match-win{
+  background:rgba(34,197,94,.09);
+  border-color:rgba(34,197,94,.22);
+  box-shadow:inset 3px 0 0 rgba(34,197,94,.38);
+}
+
+.recent-match-loss{
+  background:rgba(239,68,68,.08);
+  border-color:rgba(239,68,68,.20);
+  box-shadow:inset 3px 0 0 rgba(239,68,68,.34);
+}
+
+.member-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.member-role-select{
+  min-height:36px;
+  padding:7px 30px 7px 10px;
+  border-radius:9px;
+  border:1px solid var(--border,#d1d5db);
+  background:var(--surface,#fff);
+  color:inherit;
+  font:inherit;
+}
+
+@media (max-width:640px){
+  .team-member-row{align-items:flex-start;gap:10px;}
+  .member-actions{width:100%;justify-content:flex-start;margin-top:8px;}
+}
