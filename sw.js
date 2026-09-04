@@ -1,5 +1,5 @@
-const CACHE='volleyball-coach-hub-v10';
-const ASSETS=['./','./index.html','./coach.css?v=10','./coach.js?v=10','./history-delete.js?v=10','./manual-results.js?v=10','./conference.js?v=10','./update-manager.js?v=10','./db.js','./manifest.webmanifest','./icon-180.png','./icon-192.png','./icon-512.png'];
+const CACHE='volleyball-coach-hub-v11';
+const ASSETS=['./','./index.html','./coach.css?v=11','./coach.js?v=11','./history-delete.js?v=11','./manual-results.js?v=11','./conference.js?v=11','./cloud.js?v=11','./update-manager.js?v=11','./supabase-config.js','./db.js','./manifest.webmanifest','./icon-180.png','./icon-192.png','./icon-512.png'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(
@@ -32,8 +32,6 @@ self.addEventListener('fetch',event=>{
   const url=new URL(event.request.url);
   if(url.origin!==self.location.origin) return;
 
-  // Network-first while online prevents an old installed PWA shell from masking
-  // a newly deployed GitHub Pages build. Cached files remain the offline fallback.
   event.respondWith((async()=>{
     try{
       const fresh=await fetch(event.request,{cache:'no-store'});
