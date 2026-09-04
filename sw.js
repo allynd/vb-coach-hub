@@ -1,5 +1,5 @@
-const CACHE='volleyball-coach-hub-v13.02';
-const ASSETS=['./','./index.html','./coach.css?v=13.02','./coach.js?v=13.02','./history-delete.js?v=13.02','./manual-results.js?v=13.02','./conference.js?v=13.02','./cloud.js?v=13.02','./update-manager.js?v=13.02','./supabase-config.js','./db.js','./manifest.webmanifest','./icon-180.png','./icon-192.png','./icon-512.png'];
+const CACHE='volleyball-coach-hub-v14.00';
+const ASSETS=['./','./index.html','./coach.css?v=14.00','./coach.js?v=14.00','./history-delete.js?v=14.00','./manual-results.js?v=14.00','./conference.js?v=14.00','./cloud.js?v=14.00','./cloud-v14.js?v=14.00','./cloud-sync.js','./update-manager.js?v=14.00','./supabase-config.js','./db.js','./manifest.webmanifest','./icon-180.png','./icon-192.png','./icon-512.png'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(
