@@ -42,7 +42,7 @@ function setScore(game, setNo){
 async function deleteSet(gameId, setNo){
   const state = await loadState();
   const game = state?.games?.find(g=>g.id===gameId);
-  if(!game) return;
+  if(!game || game.manualRecord) return;
 
   const ok = confirm(`Permanently delete Set ${setNo} vs ${game.opponent || 'Opponent'}?\n\nThis removes the set score, lineup, substitutions, and every player/team stat recorded in that set.`);
   if(!ok) return;
@@ -99,6 +99,19 @@ async function openDeleteDialog(gameId){
 
   const dialog = ensureDialog();
   qs('#historyDeleteTitle').textContent = `Delete • ${game.opponent || 'Match'}`;
+
+  if(game.manualRecord){
+    qs('#historyDeleteBody').innerHTML = `
+      <p class="muted">This is a manual record-only match. Delete the entire match to remove it from the team's historical W/L record.</p>
+      <div class="card"><strong>${game.manualMatchResult || ''} ${Number(game.manualSetsWon||0)}-${Number(game.manualSetsLost||0)}</strong><div class="sub muted">No player statistics are attached to this match.</div></div>
+      <div class="button-row" style="margin-top:14px">
+        <button type="button" class="btn danger" id="historyDeleteMatch">Delete Entire Match</button>
+      </div>`;
+    qs('#historyDeleteMatch', dialog).onclick=()=>deleteMatch(gameId);
+    dialog.showModal();
+    return;
+  }
+
   const sets = getSetNumbers(state, game);
   qs('#historyDeleteBody').innerHTML = `
     <p class="muted">Deleting a set or match permanently removes its underlying stat events, so team, season, and player totals recalculate automatically.</p>
