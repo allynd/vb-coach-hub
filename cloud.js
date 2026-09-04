@@ -4,6 +4,7 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './supabase-config.js';
 const $ = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => [...root.querySelectorAll(s)];
 const esc = (v='') => String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const APP_URL = 'https://allynd.github.io/vb-coach-hub/';
 
 let clientPromise = null;
 let authSubscription = null;
@@ -31,12 +32,35 @@ function describeError(error){
   const msg=error?.message||String(error||'Unknown error');
   if(/relation .* does not exist|Could not find the table/i.test(msg)) return 'The Supabase database migration has not been applied yet. Check the Supabase deployment/migration status.';
   if(/Invalid API key|No API key found/i.test(msg)) return 'The Supabase publishable key is incorrect.';
-  if(/Unsupported provider|provider is not enabled|validation_failed/i.test(msg)) return 'Google sign-in is not enabled in Supabase yet. Enable the Google provider and add its Client ID and Client Secret.';
+  if(/Email not confirmed/i.test(msg)) return 'Your email has not been confirmed yet. Use Resend Confirmation if the original link failed.';
   if(/Failed to fetch|network/i.test(msg)) return 'Could not reach Supabase. Check your internet connection and try again.';
   return msg;
 }
 
 function message(text){ lastMessage=text; renderCloudCard(); }
+
+function authParams(){
+  const search=new URLSearchParams(window.location.search);
+  const hash=new URLSearchParams(window.location.hash.replace(/^#/,''));
+  return {search,hash};
+}
+
+function hasAuthReturnParams(){
+  const {search,hash}=authParams();
+  return ['code','error','error_code','error_description'].some(k=>search.has(k)) ||
+    ['access_token','refresh_token','error','error_code','error_description'].some(k=>hash.has(k));
+}
+
+function readAuthReturnError(){
+  const {search,hash}=authParams();
+  const raw=search.get('error_description') || hash.get('error_description');
+  if(!raw) return '';
+  try{return decodeURIComponent(raw.replace(/\+/g,' '));}catch{return raw.replace(/\+/g,' ');}
+}
+
+function cleanAuthUrl(){
+  if(hasAuthReturnParams()) history.replaceState({},document.title,APP_URL);
+}
 
 async function currentUser(){
   const supabase=await getClient();
@@ -77,32 +101,40 @@ async function signUp(){
   busy=true;renderCloudCard();
   try{
     const supabase=await getClient();
-    const {data,error}=await supabase.auth.signUp({email,password,options:{data:{display_name:displayName}}});
+    const {data,error}=await supabase.auth.signUp({
+      email,
+      password,
+      options:{
+        data:{display_name:displayName},
+        emailRedirectTo:APP_URL
+      }
+    });
     if(error) throw error;
     if(data.session){
       await ensureProfile(data.user,displayName);
       lastMessage='Account created and signed in.';
     }else{
-      lastMessage='Account created. Check your email for the Supabase confirmation link, then sign in.';
+      lastMessage='Account created. Check your email for the confirmation link. It will return to Coach Hub, then you can sign in.';
     }
   }catch(e){lastMessage=describeError(e);}
   finally{busy=false;renderCloudCard();}
 }
 
-async function signInWithGoogle(){
+async function resendConfirmation(){
+  const email=$('#cloudEmail')?.value.trim();
+  if(!email) return message('Enter the email address you used to create the account first.');
+  busy=true;renderCloudCard();
   try{
     const supabase=await getClient();
-    const redirectTo=`${window.location.origin}${window.location.pathname}`;
-    const {error}=await supabase.auth.signInWithOAuth({
-      provider:'google',
-      options:{redirectTo}
+    const {error}=await supabase.auth.resend({
+      type:'signup',
+      email,
+      options:{emailRedirectTo:APP_URL}
     });
     if(error) throw error;
-  }catch(e){
-    lastMessage=describeError(e);
-    busy=false;
-    renderCloudCard();
-  }
+    lastMessage='A new confirmation email was sent. Use the newest confirmation link.';
+  }catch(e){lastMessage=describeError(e);}
+  finally{busy=false;renderCloudCard();}
 }
 
 async function signOut(){
@@ -218,18 +250,22 @@ async function downloadCloudTeam(teamId){
       supabase.from('teams').select('*').eq('id',teamId).is('deleted_at',null).single(),
       supabase.from('players').select('*').eq('team_id',teamId).is('deleted_at',null)
     ]);
-    if(teamError) throw teamError;if(playersError) throw playersError;
+    if(teamError) throw teamError;
+    if(playersError) throw playersError;
 
     const state=await loadState()||{teams:[],players:[],games:[],events:[],settings:{statMode:'advanced'}};
-    state.teams=state.teams||[];state.players=state.players||[];
+    state.teams=state.teams||[];
+    state.players=state.players||[];
     const localTeam={id:team.id,name:team.name,school:team.school||'',level:team.level||'',season:team.season||'',createdAt:team.created_at};
     const existingTeam=state.teams.find(t=>t.id===team.id);
-    if(existingTeam) Object.assign(existingTeam,{...localTeam,logo:existingTeam.logo||''}); else state.teams.push(localTeam);
+    if(existingTeam) Object.assign(existingTeam,{...localTeam,logo:existingTeam.logo||''});
+    else state.teams.push(localTeam);
 
     for(const p of players||[]){
       const local={id:p.id,personId:p.person_id||p.id,teamId:p.team_id,firstName:p.first_name||'',lastName:p.last_name||'',jersey:p.jersey||'',position:p.position||'',secondaryPosition:p.secondary_position||'',height:p.height||'',gradYear:p.grad_year||'',hand:p.dominant_hand||'',notes:p.notes||'',archived:!!p.archived};
       const existing=state.players.find(x=>x.id===p.id);
-      if(existing) Object.assign(existing,{...local,photo:existing.photo||''}); else state.players.push(local);
+      if(existing) Object.assign(existing,{...local,photo:existing.photo||''});
+      else state.players.push(local);
     }
     state.activeTeamId=team.id;
     await saveState(state);
@@ -240,17 +276,19 @@ async function downloadCloudTeam(teamId){
 
 async function cloudCardHtml(){
   if(!isConfigured()){
-    return `<div class="card" id="cloudAccountCard"><div class="section-head"><div><h3>☁ Cloud & Accounts</h3><div class="muted">Supabase foundation is installed, but this site still needs the project URL and publishable key.</div></div><span class="badge visible-badge">Setup needed</span></div><div class="notice"><strong>Next setup step:</strong> edit <code>supabase-config.js</code> and paste the Project URL plus the <strong>publishable</strong> key (<code>sb_publishable_…</code>) from Supabase → Connect. Never use a secret/service-role key here.</div></div>`;
+    return `<div class="card" id="cloudAccountCard"><div class="section-head"><div><h3>☁ Cloud & Accounts</h3><div class="muted">Supabase foundation is installed, but this site still needs the project URL and publishable key.</div></div><span class="badge visible-badge">Setup needed</span></div></div>`;
   }
 
   let user=null;
-  try{user=await currentUser();}catch(e){return `<div class="card" id="cloudAccountCard"><h3>☁ Cloud & Accounts</h3><div class="notice">${esc(describeError(e))}</div></div>`;}
+  try{user=await currentUser();}
+  catch(e){return `<div class="card" id="cloudAccountCard"><h3>☁ Cloud & Accounts</h3><div class="notice">${esc(describeError(e))}</div></div>`;}
 
   if(!user){
-    return `<div class="card" id="cloudAccountCard"><div class="section-head"><div><h3>☁ Coach Account</h3><div class="muted">Sign in to access shared cloud teams. Local/offline data continues to work without an account.</div></div><span class="badge visible-badge">Local only</span></div><div class="button-row" style="margin-bottom:14px"><button class="btn primary" type="button" id="cloudGoogleSignIn" ${busy?'disabled':''}>Continue with Google</button></div><div class="muted" style="text-align:center;margin:4px 0 12px">or use email</div><div class="form-grid"><div class="field"><label>Name (new accounts)</label><input id="cloudName" autocomplete="name" enterkeyhint="next" placeholder="Coach name"></div><div class="field"><label>Email</label><input id="cloudEmail" type="email" inputmode="email" autocomplete="email" enterkeyhint="next" placeholder="coach@example.com"></div><div class="field"><label>Password</label><input id="cloudPassword" type="password" autocomplete="current-password" enterkeyhint="done" placeholder="Password"></div></div><div class="button-row"><button class="btn primary" type="button" id="cloudSignIn" ${busy?'disabled':''}>Sign In</button><button class="btn" type="button" id="cloudSignUp" ${busy?'disabled':''}>Create Account</button></div>${lastMessage?`<div class="notice" style="margin-top:12px">${esc(lastMessage)}</div>`:''}</div>`;
+    return `<div class="card" id="cloudAccountCard"><div class="section-head"><div><h3>☁ Coach Account</h3><div class="muted">Sign in to access shared cloud teams. Local/offline data continues to work without an account.</div></div><span class="badge visible-badge">Local only</span></div><div class="form-grid"><div class="field"><label>Name (new accounts)</label><input id="cloudName" autocomplete="name" enterkeyhint="next" placeholder="Coach name"></div><div class="field"><label>Email</label><input id="cloudEmail" type="email" inputmode="email" autocomplete="email" enterkeyhint="next" placeholder="coach@example.com"></div><div class="field"><label>Password</label><input id="cloudPassword" type="password" autocomplete="current-password" enterkeyhint="done" placeholder="Password"></div></div><div class="button-row"><button class="btn primary" type="button" id="cloudSignIn" ${busy?'disabled':''}>Sign In</button><button class="btn" type="button" id="cloudSignUp" ${busy?'disabled':''}>Create Account</button><button class="btn compact" type="button" id="cloudResend" ${busy?'disabled':''}>Resend Confirmation</button></div>${lastMessage?`<div class="notice" style="margin-top:12px">${esc(lastMessage)}</div>`:''}</div>`;
   }
 
-  let teams=[];let teamError='';
+  let teams=[];
+  let teamError='';
   try{teams=await listCloudTeams(user.id);}catch(e){teamError=describeError(e);}
   return `<div class="card" id="cloudAccountCard"><div class="section-head"><div><h3>☁ Cloud & Accounts</h3><div class="muted">Signed in as ${esc(user.email||'Coach')}</div></div><span class="badge visible-badge">Cloud connected</span></div><div class="button-row"><button type="button" class="btn primary" id="cloudUpload" ${busy?'disabled':''}>Upload / Refresh Active Team</button><button type="button" class="btn" id="cloudRefresh" ${busy?'disabled':''}>Refresh</button><button type="button" class="btn" id="cloudSignOut" ${busy?'disabled':''}>Sign Out</button></div>${lastMessage?`<div class="notice" style="margin-top:12px">${esc(lastMessage)}</div>`:''}<hr><h3>My Cloud Teams</h3>${teamError?`<div class="notice">${esc(teamError)}</div>`:`<div class="list">${teams.map(x=>`<div class="list-item"><div><strong>${esc(x.team.name)}</strong><div class="muted">${esc(x.team.school||'')} ${x.team.season?`• ${esc(x.team.season)}`:''} • ${esc(x.role)}</div></div><button type="button" class="btn compact" data-cloud-download="${esc(x.team.id)}" ${busy?'disabled':''}>Download</button></div>`).join('')||'<div class="muted">No cloud teams yet. Upload your active local team to create the first one.</div>'}</div>`}<div class="muted helper" style="margin-top:12px">Current phase syncs team metadata and roster. Match/event synchronization and coach invitations are the next phase.</div></div>`;
 }
@@ -263,11 +301,16 @@ async function renderCloudCard(){
   rendering=true;
   try{
     let host=$('#cloudAccountHost',main);
-    if(!host){host=document.createElement('div');host.id='cloudAccountHost';host.style.marginTop='14px';main.appendChild(host);}
+    if(!host){
+      host=document.createElement('div');
+      host.id='cloudAccountHost';
+      host.style.marginTop='14px';
+      main.appendChild(host);
+    }
     host.innerHTML=await cloudCardHtml();
-    $('#cloudGoogleSignIn',host)?.addEventListener('click',signInWithGoogle);
     $('#cloudSignIn',host)?.addEventListener('click',signIn);
     $('#cloudSignUp',host)?.addEventListener('click',signUp);
+    $('#cloudResend',host)?.addEventListener('click',resendConfirmation);
     $('#cloudSignOut',host)?.addEventListener('click',signOut);
     $('#cloudUpload',host)?.addEventListener('click',uploadActiveTeam);
     $('#cloudRefresh',host)?.addEventListener('click',()=>{lastMessage='';renderCloudCard();});
@@ -278,7 +321,21 @@ async function renderCloudCard(){
 async function initAuthWatcher(){
   if(!isConfigured()) return;
   try{
+    const returnedWithAuth=hasAuthReturnParams();
+    const returnError=readAuthReturnError();
     const supabase=await getClient();
+
+    if(returnError){
+      lastMessage=`Account confirmation failed: ${returnError}`;
+      cleanAuthUrl();
+    }else if(returnedWithAuth){
+      const {data,error}=await supabase.auth.getSession();
+      if(error) lastMessage=describeError(error);
+      else if(data?.session) lastMessage='Email confirmed. Your Coach Hub account is signed in.';
+      else lastMessage='Email confirmed. Return to the Coach Hub app and sign in with your email and password.';
+      cleanAuthUrl();
+    }
+
     const {data}=supabase.auth.onAuthStateChange((event,session)=>{
       if(session?.user && (event==='SIGNED_IN'||event==='INITIAL_SESSION')){
         setTimeout(()=>ensureProfile(session.user).catch(e=>console.warn('Profile sync failed',e)),0);
@@ -286,12 +343,14 @@ async function initAuthWatcher(){
       setTimeout(renderCloudCard,0);
     });
     authSubscription=data?.subscription||null;
-  }catch(e){console.warn('Coach Hub cloud init failed',e);}
+  }catch(e){
+    console.warn('Coach Hub cloud init failed',e);
+    lastMessage=describeError(e);
+  }
 }
 
-// Only render the cloud card when Coach Hub navigates into the Team view.
-// The old implementation watched the entire DOM subtree and re-created the
-// account inputs repeatedly, which caused iOS Safari/PWA focus and keyboard loss.
+// Render cloud controls only when Coach Hub navigates into the Team view.
+// This avoids replacing focused inputs and preserves the iOS keyboard behavior.
 const main=$('#main');
 if(main){
   const observer=new MutationObserver(()=>{
