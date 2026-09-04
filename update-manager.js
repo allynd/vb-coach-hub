@@ -1,4 +1,4 @@
-const BUILD_VERSION = 'v10';
+const BUILD_VERSION = 'v11';
 
 function addVersionUI(){
   const actions=document.querySelector('.topbar-actions');
@@ -55,7 +55,6 @@ async function forceUpdate(userInitiated=false){
 
     if(await activateWaiting(reg)) return;
 
-    // Give an installing worker a brief opportunity to become waiting.
     if(reg.installing){
       await new Promise(resolve=>{
         const timer=setTimeout(resolve,1500);
@@ -68,10 +67,7 @@ async function forceUpdate(userInitiated=false){
       if(await activateWaiting(reg)) return;
     }
 
-    if(userInitiated){
-      // Reload from the network. The v10 service worker uses network-first while online.
-      window.location.reload();
-    }
+    if(userInitiated) window.location.reload();
   }catch(err){
     console.warn('Coach Hub update check failed',err);
     if(userInitiated) window.location.reload();
