@@ -9,14 +9,18 @@
   <meta name="apple-mobile-web-app-title" content="Coach Hub" />
   <title>Volleyball Coach Hub</title>
   <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icon-180.png" />
   <link rel="stylesheet" href="./coach.css" />
 </head>
 <body>
   <div id="app">
     <header class="topbar">
-      <div>
-        <div class="eyebrow">VOLLEYBALL</div>
-        <h1 id="headerTitle">Coach Hub</h1>
+      <div class="topbar-team">
+        <div id="headerLogo" class="header-logo-slot"></div>
+        <div>
+          <div class="eyebrow">VOLLEYBALL</div>
+          <h1 id="headerTitle">Coach Hub</h1>
+        </div>
       </div>
       <div class="topbar-actions">
         <span id="offlineBadge" class="badge">Offline ready</span>
@@ -30,7 +34,9 @@
       <button class="nav-btn active" data-view="dashboard"><span>⌂</span><small>Home</small></button>
       <button class="nav-btn" data-view="gameday"><span>🏐</span><small>Game Day</small></button>
       <button class="nav-btn" data-view="roster"><span>👥</span><small>Roster</small></button>
+      <button class="nav-btn" data-view="players"><span>★</span><small>Players</small></button>
       <button class="nav-btn" data-view="stats"><span>▥</span><small>Stats</small></button>
+      <button class="nav-btn" data-view="games"><span>☷</span><small>Games</small></button>
       <button class="nav-btn" data-view="team"><span>⚙</span><small>Team</small></button>
     </nav>
   </div>
