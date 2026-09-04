@@ -1,5 +1,5 @@
-const CACHE='volleyball-coach-hub-v15.00';
-const ASSETS=['./','./index.html','./coach.css?v=15.00','./coach.js?v=15.00','./history-delete.js?v=15.00','./manual-results.js?v=15.00','./conference.js?v=15.00','./cloud.js?v=15.00','./cloud-v14.js?v=15.00','./team-invites.js?v=15.00','./cloud-sync.js','./update-manager.js?v=15.00','./supabase-config.js','./db.js','./manifest.webmanifest','./icon-180.png','./icon-192.png','./icon-512.png'];
+const CACHE='volleyball-coach-hub-v15.01';
+const ASSETS=['./','./index.html','./coach.css?v=15.01','./minor-ui.css?v=15.01','./coach.js?v=15.01','./history-delete.js?v=15.01','./manual-results.js?v=15.01','./conference.js?v=15.01','./cloud.js?v=15.01','./cloud-v14.js?v=15.01','./team-invites.js?v=15.01','./team-membership.js?v=15.01','./dashboard-results.js?v=15.01','./cloud-sync.js','./update-manager.js?v=15.01','./supabase-config.js','./db.js','./manifest.webmanifest','./icon-180.png','./icon-192.png','./icon-512.png'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(
