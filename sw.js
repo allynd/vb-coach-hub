@@ -1,5 +1,5 @@
-const CACHE='volleyball-coach-hub-v15.05';
-const ASSETS=['./','./index.html','./coach.css?v=15.05','./minor-ui.css?v=15.05','./gameday-controls.css?v=15.05','./coach.js?v=15.05','./history-delete.js?v=15.05','./manual-results.js?v=15.05','./conference.js?v=15.05','./cloud.js?v=15.05','./cloud-v14.js?v=15.05','./team-invites.js?v=15.05','./team-membership.js?v=15.05','./dashboard-results.js?v=15.05','./restore-fix.js?v=15.05','./class-year.js?v=15.05','./gameday-controls.js?v=15.05','./cloud-restore.js','./cloud-sync.js','./update-manager.js?v=15.05','./supabase-config.js','./db.js','./manifest.webmanifest','./icon-180.png','./icon-192.png','./icon-512.png'];
+const CACHE='volleyball-coach-hub-v15.06';
+const ASSETS=['./','./index.html','./coach.css?v=15.06','./minor-ui.css?v=15.06','./gameday-controls.css?v=15.06','./coach.js?v=15.06','./history-delete.js?v=15.06','./manual-results.js?v=15.06','./conference.js?v=15.06','./cloud.js?v=15.06','./cloud-v14.js?v=15.06','./team-invites.js?v=15.06','./team-membership.js?v=15.06','./dashboard-results.js?v=15.06','./restore-fix.js?v=15.06','./class-year.js?v=15.06','./gameday-controls.js?v=15.06','./libero-active.js?v=15.06','./cloud-restore.js','./cloud-sync.js','./update-manager.js?v=15.06','./supabase-config.js','./db.js','./manifest.webmanifest','./icon-180.png','./icon-192.png','./icon-512.png'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(
