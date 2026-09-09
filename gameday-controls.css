@@ -1,0 +1,125 @@
+.game-admin-bar{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+}
+.game-admin-metric{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:12px;
+  min-height:108px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+}
+.game-admin-metric>span{
+  color:var(--muted);
+  font-size:12px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+}
+.game-admin-metric>strong{
+  font-size:28px;
+  line-height:1.1;
+  margin:4px 0;
+}
+.game-admin-metric>strong small{
+  font-size:15px;
+  color:var(--muted);
+}
+.game-admin-actions{
+  display:flex;
+  gap:6px;
+  margin-top:6px;
+}
+.game-admin-actions .btn{
+  min-height:34px;
+}
+.game-admin-note{
+  color:var(--muted);
+  font-size:11px;
+  margin-top:5px;
+}
+.game-admin-metric.limit-reached{
+  border-color:rgba(251,113,133,.7);
+  box-shadow:inset 0 0 0 1px rgba(251,113,133,.2);
+}
+
+.rotation-court{
+  display:grid !important;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  grid-template-areas:
+    "p4 p3 p2"
+    "p5 p6 p1";
+  gap:8px;
+  position:relative;
+  padding:10px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:linear-gradient(180deg,rgba(96,165,250,.035),rgba(96,165,250,.015));
+}
+.rotation-court::before{
+  content:"NET";
+  position:absolute;
+  left:10px;
+  right:10px;
+  top:50%;
+  transform:translateY(-50%);
+  border-top:2px dashed rgba(154,166,189,.3);
+  color:var(--muted);
+  font-size:9px;
+  letter-spacing:.16em;
+  text-align:center;
+  line-height:0;
+  pointer-events:none;
+}
+.rotation-court .court-player{
+  z-index:1;
+  min-height:108px;
+}
+.physical-position{
+  position:absolute;
+  right:7px;
+  bottom:6px;
+  font-size:9px;
+  color:var(--muted);
+  font-weight:800;
+  letter-spacing:.03em;
+}
+
+.lineup-start-helper{
+  margin:14px 0 8px;
+  padding:10px 12px;
+  border-radius:12px;
+  background:var(--panel-2);
+  border:1px solid var(--line);
+}
+.lineup-start-helper strong{
+  display:block;
+  margin-bottom:3px;
+}
+.lineup-start-helper span{
+  display:block;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:500;
+}
+.serve-receive[data-v1505="1"]{
+  margin-bottom:14px;
+}
+
+@media (max-width:700px){
+  .game-admin-bar{grid-template-columns:1fr 1fr;}
+  .game-admin-metric:last-child{grid-column:1/-1;min-height:auto;}
+}
+@media (max-width:430px){
+  .game-admin-bar{grid-template-columns:1fr 1fr;}
+  .game-admin-metric{padding:10px;min-height:102px;}
+  .game-admin-metric>strong{font-size:24px;}
+  .rotation-court{gap:6px;padding:7px;}
+  .rotation-court .court-player{min-height:96px;padding:7px 5px;}
+  .rotation-court .court-player strong{font-size:12px;}
+  .physical-position{font-size:8px;right:5px;bottom:4px;}
+}
