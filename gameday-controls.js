@@ -110,18 +110,20 @@ function renderAdminBar(state,game,lineup,rotation){
     </div>`;
   if(bar.innerHTML!==html) bar.innerHTML=html;
 
-  $('#useTimeout',bar)?.addEventListener('click',()=>{
+  const use=$('#useTimeout',bar);
+  if(use) use.onclick=()=>{
     const current=timeoutsUsed(game);
     if(current>=MAX_TIMEOUTS) return;
     setTimeoutsUsed(game,current+1);
     enhance();
-  },{once:true});
-  $('#undoTimeout',bar)?.addEventListener('click',()=>{
+  };
+  const undo=$('#undoTimeout',bar);
+  if(undo) undo.onclick=()=>{
     const current=timeoutsUsed(game);
     if(current<=0) return;
     setTimeoutsUsed(game,current-1);
     enhance();
-  },{once:true});
+  };
 }
 
 function arrangeCourt(lineup,rotation){
@@ -146,7 +148,8 @@ function arrangeCourt(lineup,rotation){
       tag.className='physical-position';
       card.appendChild(tag);
     }
-    tag.textContent=`P${pos} ${POS_NAMES[pos]||''}`;
+    const label=`P${pos} ${POS_NAMES[pos]||''}`;
+    if(tag.textContent!==label) tag.textContent=label;
   });
 }
 
