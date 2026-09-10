@@ -11,27 +11,17 @@ let timer=null;
 function activeContext(state){
   const game=(state?.games||[]).find(g=>g.id===state?.activeGameId&&!g.complete)||null;
   if(!game) return {game:null,lineup:null};
-  const lineup=game.setLineups?.[String(game.currentSet)]||null;
-  return {game,lineup};
+  return {game,lineup:game.setLineups?.[String(game.currentSet)]||null};
 }
 
-function timeoutKey(game){
-  return `coach-hub-timeouts:${game.id}:set:${game.currentSet}`;
-}
+function timeoutKey(game){return `coach-hub-timeouts:${game.id}:set:${game.currentSet}`;}
+function timeoutsUsed(game){const n=Number(localStorage.getItem(timeoutKey(game))||0);return Number.isFinite(n)?Math.max(0,Math.min(MAX_TIMEOUTS,n)):0;}
+function setTimeoutsUsed(game,n){localStorage.setItem(timeoutKey(game),String(Math.max(0,Math.min(MAX_TIMEOUTS,n))));}
+function substitutionCount(lineup){return (lineup?.substitutions||[]).filter(s=>['sub_regular','sub_serve'].includes(s.type)).length;}
 
-function timeoutsUsed(game){
-  const raw=Number(localStorage.getItem(timeoutKey(game))||0);
-  return Number.isFinite(raw)?Math.max(0,Math.min(MAX_TIMEOUTS,raw)):0;
-}
-
-function setTimeoutsUsed(game,value){
-  localStorage.setItem(timeoutKey(game),String(Math.max(0,Math.min(MAX_TIMEOUTS,value))));
-}
-
-function substitutionCount(lineup){
-  return (lineup?.substitutions||[]).filter(s=>['sub_regular','sub_serve'].includes(s.type)).length;
-}
-
+/* shift 0 = submitted serving rotation: I at P1, II at P2 ... VI at P6.
+   Receive-first starts one spot back (shift 1). Each side-out rotates clockwise,
+   which moves P2->P1, P3->P2, etc., so shift decreases by one. */
 function rallyState(state,game,lineup){
   let serving=lineup?.serveReceive!=='receive';
   let shift=serving?0:1;
@@ -43,10 +33,7 @@ function rallyState(state,game,lineup){
   for(const e of events){
     const impact=Number(e.scoreImpact)||0;
     if(impact>0){
-      if(!serving){
-        shift=(shift+5)%6;
-        serving=true;
-      }
+      if(!serving){shift=(shift+5)%6;serving=true;}
     }else if(impact<0&&serving){
       serving=false;
     }
@@ -54,9 +41,7 @@ function rallyState(state,game,lineup){
   return {serving,shift};
 }
 
-function physicalPosition(serviceSlot,shift){
-  return ((serviceSlot+shift)%6)+1;
-}
+function physicalPosition(serviceSlot,shift){return ((serviceSlot+shift)%6)+1;}
 
 function enhanceLineupForm(){
   const body=$('#modalBody');
@@ -64,123 +49,80 @@ function enhanceLineupForm(){
   if(!body||!save) return;
   const choice=$('.serve-receive',body);
   if(!choice||choice.dataset.v1505==='1') return;
-
   const buttonRow=save.closest('.button-row');
   if(buttonRow) buttonRow.insertAdjacentElement('beforebegin',choice);
   choice.dataset.v1505='1';
   const spans=$$('span',choice);
   if(spans[0]) spans[0].textContent='Serve First';
   if(spans[1]) spans[1].textContent='Receive First';
-
   const helper=document.createElement('div');
   helper.className='lineup-start-helper';
-  helper.innerHTML='<strong>Starting status</strong><span>After setting I–VI and your libero(s), choose Serve or Receive. Coach Hub will place the service order into the correct starting rotation automatically.</span>';
+  helper.innerHTML='<strong>Starting status</strong><span>Set I–VI first, then choose Serve or Receive. Receive starts everyone one rotation back; side-outs rotate the court clockwise automatically.</span>';
   choice.insertAdjacentElement('beforebegin',helper);
 }
 
-function renderAdminBar(state,game,lineup,rotation){
+function renderAdminBar(game,lineup,rotation){
   const scoreboard=$('.scoreboard');
   if(!scoreboard) return;
   let bar=$('#gameAdminBar');
-  if(!bar){
-    bar=document.createElement('section');
-    bar.id='gameAdminBar';
-    bar.className='game-admin-bar';
-    scoreboard.insertAdjacentElement('afterend',bar);
-  }
-
-  const used=timeoutsUsed(game);
-  const left=MAX_TIMEOUTS-used;
-  const subs=substitutionCount(lineup);
-  const html=`
-    <div class="game-admin-metric">
-      <span>Timeouts Left</span>
-      <strong>${left}</strong>
-      <div class="game-admin-actions"><button type="button" class="btn compact" id="useTimeout" ${left<=0?'disabled':''}>Use TO</button><button type="button" class="btn compact ghost" id="undoTimeout" ${used<=0?'disabled':''}>+1</button></div>
-    </div>
-    <div class="game-admin-metric ${subs>=MAX_SUBS?'limit-reached':''}">
-      <span>Subs Used</span>
-      <strong>${subs} <small>/ ${MAX_SUBS}</small></strong>
-      <div class="game-admin-note">Libero replacements excluded</div>
-    </div>
-    <div class="game-admin-metric">
-      <span>Current Status</span>
-      <strong>${rotation.serving?'Serving':'Receiving'}</strong>
-      <div class="game-admin-note">Court rotates automatically on side-out</div>
-    </div>`;
-  if(bar.innerHTML!==html) bar.innerHTML=html;
-
-  const use=$('#useTimeout',bar);
-  if(use) use.onclick=()=>{
-    const current=timeoutsUsed(game);
-    if(current>=MAX_TIMEOUTS) return;
-    setTimeoutsUsed(game,current+1);
-    enhance();
-  };
-  const undo=$('#undoTimeout',bar);
-  if(undo) undo.onclick=()=>{
-    const current=timeoutsUsed(game);
-    if(current<=0) return;
-    setTimeoutsUsed(game,current-1);
-    enhance();
-  };
+  if(!bar){bar=document.createElement('section');bar.id='gameAdminBar';bar.className='game-admin-bar';scoreboard.insertAdjacentElement('afterend',bar);}
+  const used=timeoutsUsed(game),left=MAX_TIMEOUTS-used,subs=substitutionCount(lineup);
+  bar.innerHTML=`
+    <div class="game-admin-metric"><span>Timeouts Left</span><strong>${left}</strong><div class="game-admin-actions"><button type="button" class="btn compact" id="useTimeout" ${left<=0?'disabled':''}>Use TO</button><button type="button" class="btn compact ghost" id="undoTimeout" ${used<=0?'disabled':''}>+1</button></div></div>
+    <div class="game-admin-metric ${subs>=MAX_SUBS?'limit-reached':''}"><span>Subs Used</span><strong>${subs} <small>/ ${MAX_SUBS}</small></strong><div class="game-admin-note">Libero replacements excluded</div></div>
+    <div class="game-admin-metric"><span>Current Status</span><strong>${rotation.serving?'Serving':'Receiving'}</strong><div class="game-admin-note">Rotates clockwise on side-out</div></div>`;
+  const use=$('#useTimeout',bar);if(use)use.onclick=()=>{const n=timeoutsUsed(game);if(n<MAX_TIMEOUTS){setTimeoutsUsed(game,n+1);enhance();}};
+  const undo=$('#undoTimeout',bar);if(undo)undo.onclick=()=>{const n=timeoutsUsed(game);if(n>0){setTimeoutsUsed(game,n-1);enhance();}};
 }
 
 function arrangeCourt(lineup,rotation){
   const court=$('.court-six');
   if(!court||!lineup) return;
-  court.classList.add('rotation-court');
   const slots=lineup.currentSlots||lineup.slots||[];
-
   $$('.court-player',court).forEach(card=>{
     const playerId=card.dataset.selectPlayer;
     const serviceSlot=slots.indexOf(playerId);
-    if(serviceSlot<0) return;
+    if(serviceSlot<0)return;
     const pos=physicalPosition(serviceSlot,rotation.shift);
     card.style.gridArea=`p${pos}`;
     card.dataset.courtPosition=String(pos);
-    card.dataset.positionName=POS_NAMES[pos]||'';
     const order=card.querySelector('.service-order');
-    if(order) order.title=`Service order ${order.textContent} • Court position ${pos} ${POS_NAMES[pos]||''}`;
+    if(order)order.title=`Service order ${order.textContent} • Current court position ${pos}`;
     let tag=card.querySelector('.physical-position');
-    if(!tag){
-      tag=document.createElement('span');
-      tag.className='physical-position';
-      card.appendChild(tag);
-    }
-    const label=`P${pos} ${POS_NAMES[pos]||''}`;
-    if(tag.textContent!==label) tag.textContent=label;
+    if(!tag){tag=document.createElement('span');tag.className='physical-position';card.appendChild(tag);}
+    tag.textContent=`P${pos} ${POS_NAMES[pos]||''}`;
   });
+
+  const status=$('.score-mid .muted');
+  if(status){
+    const parts=status.textContent.split('•');
+    parts[0]=rotation.serving?'Serving ':'Receiving ';
+    status.textContent=parts.join('•');
+  }
 }
 
 async function enhanceGameDay(){
-  if(enhancing) return;
-  const court=$('.court-six');
-  if(!court) return;
+  if(enhancing||!$('.court-six'))return;
   enhancing=true;
   try{
     const state=await loadState();
     const {game,lineup}=activeContext(state);
-    if(!game||!lineup) return;
+    if(!game||!lineup)return;
     const rotation=rallyState(state,game,lineup);
-    renderAdminBar(state,game,lineup,rotation);
+    renderAdminBar(game,lineup,rotation);
     arrangeCourt(lineup,rotation);
-  }catch(e){
-    console.warn('Game Day controls enhancement failed',e);
-  }finally{
-    enhancing=false;
-  }
+  }catch(e){console.warn('Game Day controls enhancement failed',e);}
+  finally{enhancing=false;}
 }
 
-async function enhance(){
-  enhanceLineupForm();
-  await enhanceGameDay();
-}
+async function enhance(){enhanceLineupForm();await enhanceGameDay();}
+function scheduleEnhance(){clearTimeout(timer);timer=setTimeout(enhance,40);}
 
-const observer=new MutationObserver(()=>{
-  clearTimeout(timer);
-  timer=setTimeout(enhance,35);
-});
+const observer=new MutationObserver(scheduleEnhance);
 observer.observe(document.body,{childList:true,subtree:true});
-window.addEventListener('online',enhance);
-setTimeout(enhance,250);
+window.addEventListener('online',scheduleEnhance);
+window.addEventListener('pageshow',scheduleEnhance);
+setTimeout(enhance,150);
+/* iOS/PWA views can finish rendering after the initial observer pass. This light
+   poll makes the Game Day court/counters self-healing without changing match data. */
+setInterval(()=>{if($('.court-six'))enhanceGameDay();},750);
