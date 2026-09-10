@@ -13,71 +13,64 @@
   flex-direction:column;
   justify-content:center;
 }
-.game-admin-metric>span{
-  color:var(--muted);
-  font-size:12px;
-  font-weight:800;
-  text-transform:uppercase;
-  letter-spacing:.05em;
-}
-.game-admin-metric>strong{
-  font-size:28px;
-  line-height:1.1;
-  margin:4px 0;
-}
-.game-admin-metric>strong small{
-  font-size:15px;
-  color:var(--muted);
-}
-.game-admin-actions{
-  display:flex;
-  gap:6px;
-  margin-top:6px;
-}
-.game-admin-actions .btn{
-  min-height:34px;
-}
-.game-admin-note{
-  color:var(--muted);
-  font-size:11px;
-  margin-top:5px;
-}
-.game-admin-metric.limit-reached{
-  border-color:rgba(251,113,133,.7);
-  box-shadow:inset 0 0 0 1px rgba(251,113,133,.2);
-}
+.game-admin-metric>span{color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;}
+.game-admin-metric>strong{font-size:28px;line-height:1.1;margin:4px 0;}
+.game-admin-metric>strong small{font-size:15px;color:var(--muted);}
+.game-admin-actions{display:flex;gap:6px;margin-top:6px;}
+.game-admin-actions .btn{min-height:34px;}
+.game-admin-note{color:var(--muted);font-size:11px;margin-top:5px;}
+.game-admin-metric.limit-reached{border-color:rgba(251,113,133,.7);box-shadow:inset 0 0 0 1px rgba(251,113,133,.2);}
 
-.rotation-court{
+/* Game Day court: front row is nearest the net. The default DOM order is
+   service order I-VI, so these areas make the submitted serving lineup show
+   IV-III-II / V-VI-I exactly like a volleyball rotation sheet. JS moves each
+   service-order card to its live floor position as side-outs occur. */
+.court-six{
   display:grid !important;
   grid-template-columns:repeat(3,minmax(0,1fr)) !important;
   grid-template-areas:
     "p4 p3 p2"
-    "p5 p6 p1";
-  gap:8px;
+    "p5 p6 p1" !important;
+  gap:7px !important;
   position:relative;
-  padding:10px;
+  padding:30px 8px 8px !important;
   border:1px solid var(--line);
   border-radius:16px;
-  background:linear-gradient(180deg,rgba(96,165,250,.035),rgba(96,165,250,.015));
+  background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(96,165,250,.025));
+  overflow:hidden;
 }
-.rotation-court::before{
+.court-six::before{
   content:"NET";
   position:absolute;
-  left:10px;
-  right:10px;
-  top:50%;
-  transform:translateY(-50%);
-  border-top:2px dashed rgba(154,166,189,.3);
-  color:var(--muted);
+  left:8px;
+  right:8px;
+  top:16px;
+  height:0;
+  border-top:3px solid rgba(248,250,252,.88);
+  color:#f8fafc;
   font-size:9px;
-  letter-spacing:.16em;
+  font-weight:900;
+  letter-spacing:.18em;
   text-align:center;
   line-height:0;
+  text-shadow:0 0 6px var(--bg),0 0 6px var(--bg);
   pointer-events:none;
+  z-index:3;
 }
-.rotation-court .court-player{
+.court-six .court-player:nth-child(1){grid-area:p1;}
+.court-six .court-player:nth-child(2){grid-area:p2;}
+.court-six .court-player:nth-child(3){grid-area:p3;}
+.court-six .court-player:nth-child(4){grid-area:p4;}
+.court-six .court-player:nth-child(5){grid-area:p5;}
+.court-six .court-player:nth-child(6){grid-area:p6;}
+.court-six .court-player{
   z-index:1;
   min-height:108px;
+}
+.court-six .service-order{
+  color:var(--accent);
+  font-size:15px;
+  font-weight:900;
 }
 .physical-position{
   position:absolute;
@@ -89,26 +82,10 @@
   letter-spacing:.03em;
 }
 
-.lineup-start-helper{
-  margin:14px 0 8px;
-  padding:10px 12px;
-  border-radius:12px;
-  background:var(--panel-2);
-  border:1px solid var(--line);
-}
-.lineup-start-helper strong{
-  display:block;
-  margin-bottom:3px;
-}
-.lineup-start-helper span{
-  display:block;
-  color:var(--muted);
-  font-size:12px;
-  font-weight:500;
-}
-.serve-receive[data-v1505="1"]{
-  margin-bottom:14px;
-}
+.lineup-start-helper{margin:14px 0 8px;padding:10px 12px;border-radius:12px;background:var(--panel-2);border:1px solid var(--line);}
+.lineup-start-helper strong{display:block;margin-bottom:3px;}
+.lineup-start-helper span{display:block;color:var(--muted);font-size:12px;font-weight:500;}
+.serve-receive[data-v1505="1"]{margin-bottom:14px;}
 
 @media (max-width:700px){
   .game-admin-bar{grid-template-columns:1fr 1fr;}
@@ -118,8 +95,9 @@
   .game-admin-bar{grid-template-columns:1fr 1fr;}
   .game-admin-metric{padding:10px;min-height:102px;}
   .game-admin-metric>strong{font-size:24px;}
-  .rotation-court{gap:6px;padding:7px;}
-  .rotation-court .court-player{min-height:96px;padding:7px 5px;}
-  .rotation-court .court-player strong{font-size:12px;}
+  .court-six{gap:6px !important;padding:28px 6px 6px !important;}
+  .court-six::before{left:6px;right:6px;top:14px;}
+  .court-six .court-player{min-height:96px;padding:7px 5px;}
+  .court-six .court-player strong{font-size:12px;}
   .physical-position{font-size:8px;right:5px;bottom:4px;}
 }
