@@ -11,28 +11,23 @@
   <title>Volleyball Coach Hub</title>
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./icon-180.png" />
-  <link rel="stylesheet" href="./coach.css?v=15.06" />
-  <link rel="stylesheet" href="./minor-ui.css?v=15.06" />
-  <link rel="stylesheet" href="./gameday-controls.css?v=15.06" />
+  <link rel="stylesheet" href="./coach.css?v=15.07" />
+  <link rel="stylesheet" href="./minor-ui.css?v=15.07" />
+  <link rel="stylesheet" href="./gameday-controls.css?v=15.07" />
 </head>
 <body>
   <div id="app">
     <header class="topbar">
       <div class="topbar-team">
         <div id="headerLogo" class="header-logo-slot"></div>
-        <div>
-          <div class="eyebrow">VOLLEYBALL</div>
-          <h1 id="headerTitle">Coach Hub</h1>
-        </div>
+        <div><div class="eyebrow">VOLLEYBALL</div><h1 id="headerTitle">Coach Hub</h1></div>
       </div>
       <div class="topbar-actions">
         <span id="offlineBadge" class="badge">Offline ready</span>
         <button id="quickNewGame" class="btn primary compact">New Match</button>
       </div>
     </header>
-
     <main id="main" class="main"></main>
-
     <nav class="bottom-nav" aria-label="Coach Hub navigation">
       <button class="nav-btn active" data-view="dashboard"><span>⌂</span><small>Home</small></button>
       <button class="nav-btn" data-view="gameday"><span>🏐</span><small>Game Day</small></button>
@@ -43,31 +38,21 @@
       <button class="nav-btn" data-view="team"><span>⚙</span><small>Team</small></button>
     </nav>
   </div>
-
-  <dialog id="modal" class="modal">
-    <form method="dialog" class="modal-shell">
-      <div class="modal-head">
-        <h2 id="modalTitle">Edit</h2>
-        <button class="icon-btn" value="cancel" aria-label="Close">✕</button>
-      </div>
-      <div id="modalBody"></div>
-    </form>
-  </dialog>
-
+  <dialog id="modal" class="modal"><form method="dialog" class="modal-shell"><div class="modal-head"><h2 id="modalTitle">Edit</h2><button class="icon-btn" value="cancel" aria-label="Close">✕</button></div><div id="modalBody"></div></form></dialog>
   <input id="backupImport" type="file" accept="application/json,.json,.vball" hidden />
-  <script type="module" src="./coach.js?v=15.06"></script>
-  <script type="module" src="./history-delete.js?v=15.06"></script>
-  <script type="module" src="./manual-results.js?v=15.06"></script>
-  <script type="module" src="./conference.js?v=15.06"></script>
-  <script type="module" src="./cloud.js?v=15.06"></script>
-  <script type="module" src="./cloud-v14.js?v=15.06"></script>
-  <script type="module" src="./team-invites.js?v=15.06"></script>
-  <script type="module" src="./team-membership.js?v=15.06"></script>
-  <script type="module" src="./dashboard-results.js?v=15.06"></script>
-  <script type="module" src="./restore-fix.js?v=15.06"></script>
-  <script type="module" src="./class-year.js?v=15.06"></script>
-  <script type="module" src="./gameday-controls.js?v=15.06"></script>
-  <script type="module" src="./libero-active.js?v=15.06"></script>
-  <script type="module" src="./update-manager.js?v=15.06"></script>
+  <script type="module" src="./coach.js?v=15.07"></script>
+  <script type="module" src="./history-delete.js?v=15.07"></script>
+  <script type="module" src="./manual-results.js?v=15.07"></script>
+  <script type="module" src="./conference.js?v=15.07"></script>
+  <script type="module" src="./cloud.js?v=15.07"></script>
+  <script type="module" src="./cloud-v14.js?v=15.07"></script>
+  <script type="module" src="./team-invites.js?v=15.07"></script>
+  <script type="module" src="./team-membership.js?v=15.07"></script>
+  <script type="module" src="./dashboard-results.js?v=15.07"></script>
+  <script type="module" src="./restore-fix.js?v=15.07"></script>
+  <script type="module" src="./class-year.js?v=15.07"></script>
+  <script type="module" src="./gameday-controls.js?v=15.07"></script>
+  <script type="module" src="./libero-active.js?v=15.07"></script>
+  <script type="module" src="./update-manager.js?v=15.07"></script>
 </body>
 </html>
