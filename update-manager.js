@@ -1,4 +1,4 @@
-const BUILD_VERSION = '15.06';
+const BUILD_VERSION = '15.07';
 
 function addVersionUI(){
   const actions=document.querySelector('.topbar-actions');
@@ -20,7 +20,6 @@ function addVersionUI(){
   const newMatch=document.querySelector('#quickNewGame');
   actions.insertBefore(version,newMatch || null);
   actions.insertBefore(update,newMatch || null);
-
   update.addEventListener('click',()=>forceUpdate(true));
 }
 
@@ -32,45 +31,32 @@ navigator.serviceWorker?.addEventListener('controllerchange',()=>{
 });
 
 async function activateWaiting(reg){
-  if(reg?.waiting){
-    reg.waiting.postMessage({type:'SKIP_WAITING'});
-    return true;
-  }
+  if(reg?.waiting){reg.waiting.postMessage({type:'SKIP_WAITING'});return true;}
   return false;
 }
 
 async function forceUpdate(userInitiated=false){
-  if(!('serviceWorker' in navigator)){
-    if(userInitiated) window.location.reload();
-    return;
-  }
-
+  if(!('serviceWorker' in navigator)){if(userInitiated)window.location.reload();return;}
   const button=document.querySelector('#forceAppUpdate');
   const oldText=button?.textContent;
   if(button){button.disabled=true;button.textContent='Checking…';}
-
   try{
     const reg=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
     await reg.update();
-
     if(await activateWaiting(reg)) return;
-
     if(reg.installing){
       await new Promise(resolve=>{
         const timer=setTimeout(resolve,1500);
         reg.installing.addEventListener('statechange',()=>{
-          if(reg.waiting || reg.installing?.state==='activated'){
-            clearTimeout(timer);resolve();
-          }
+          if(reg.waiting || reg.installing?.state==='activated'){clearTimeout(timer);resolve();}
         });
       });
       if(await activateWaiting(reg)) return;
     }
-
-    if(userInitiated) window.location.reload();
+    if(userInitiated)window.location.reload();
   }catch(err){
     console.warn('Coach Hub update check failed',err);
-    if(userInitiated) window.location.reload();
+    if(userInitiated)window.location.reload();
   }finally{
     if(button){button.disabled=false;button.textContent=oldText||'Update';}
   }
