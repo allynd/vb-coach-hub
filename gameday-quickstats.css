@@ -1,0 +1,140 @@
+/* 15.10 quick courtside stat entry */
+.game-shell>.selected-player-actions,
+.game-shell>.stat-groups{
+  display:none !important;
+}
+
+.game-quick-score-bar{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+  margin:10px 0;
+  padding:10px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:var(--panel);
+}
+.game-quick-score-bar .stat-btn{
+  min-height:52px;
+  font-weight:900;
+}
+.game-quick-score-bar .opponent-serve-error{
+  border-color:rgba(96,165,250,.55);
+  box-shadow:inset 0 0 0 1px rgba(96,165,250,.18);
+}
+
+.quick-stat-dialog{
+  width:min(760px,100%);
+  max-width:none;
+  margin:auto 0 0 0;
+  padding:0;
+  border:0;
+  border-radius:22px 22px 0 0;
+  background:transparent;
+  color:var(--text);
+}
+.quick-stat-dialog::backdrop{
+  background:rgba(2,6,23,.58);
+  backdrop-filter:blur(2px);
+}
+.quick-stat-sheet{
+  max-height:min(78vh,720px);
+  overflow:auto;
+  padding:16px 16px calc(18px + env(safe-area-inset-bottom));
+  border:1px solid var(--line);
+  border-bottom:0;
+  border-radius:22px 22px 0 0;
+  background:var(--bg);
+  box-shadow:0 -16px 50px rgba(0,0,0,.35);
+}
+.quick-stat-head{
+  position:sticky;
+  top:-16px;
+  z-index:3;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin:-16px -16px 10px;
+  padding:14px 16px 10px;
+  background:var(--bg);
+  border-bottom:1px solid var(--line);
+}
+.quick-stat-head h2{margin:2px 0 0;font-size:22px;}
+.quick-stat-groups{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.quick-stat-group{
+  padding:10px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:var(--panel);
+}
+.quick-stat-group h3{font-size:13px;margin:0 0 8px;color:var(--muted);}
+.quick-stat-buttons{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:6px;
+}
+.quick-stat-buttons .stat-btn{min-height:46px;padding:8px 5px;}
+.quick-sub-row{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+  margin-top:12px;
+}
+.kill-choice-grid{
+  display:grid;
+  gap:10px;
+  margin:12px 0;
+}
+.quick-choice{
+  width:100%;
+  text-align:left;
+  padding:14px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:var(--panel);
+  color:var(--text);
+  font:inherit;
+}
+.quick-choice strong{display:block;font-size:16px;margin-bottom:3px;}
+.quick-choice span{display:block;color:var(--muted);font-size:12px;}
+.quick-choice.primary-choice{border-color:rgba(96,165,250,.55);}
+.quick-player-choices{display:grid;gap:8px;margin:10px 0 14px;}
+
+.stat-correction-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+  margin-top:10px;
+}
+.stat-correction-item{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:9px 10px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--panel-2);
+}
+.stat-correction-item>span{font-size:12px;font-weight:800;}
+.stat-correction-stepper{
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+.stat-correction-stepper strong{
+  min-width:22px;
+  text-align:center;
+}
+
+@media (max-width:520px){
+  .quick-stat-groups{grid-template-columns:1fr;}
+  .game-quick-score-bar{gap:6px;padding:7px;}
+  .game-quick-score-bar .stat-btn{font-size:12px;padding:7px 4px;}
+  .stat-correction-grid{grid-template-columns:1fr;}
+}
