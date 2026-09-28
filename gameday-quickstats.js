@@ -145,28 +145,7 @@ async function openQuickStats(playerId){
   if(!dialog.open)dialog.showModal();
 }
 
-function ensureScoreBar(){
-  const shell=$('.game-shell');
-  const scoreboard=$('.scoreboard',shell||document);
-  if(!shell||!scoreboard)return;
-  let bar=$('#gameQuickScoreBar');
-  if(!bar){
-    bar=document.createElement('section');
-    bar.id='gameQuickScoreBar';
-    bar.className='game-quick-score-bar';
-    bar.innerHTML=`
-      <button type="button" class="stat-btn positive" data-quick-score="team_point">Team Point</button>
-      <button type="button" class="stat-btn positive opponent-serve-error" data-quick-score="opp_serve_error">Opp Serve Error</button>
-      <button type="button" class="stat-btn negative" data-quick-score="opp_point">Opp Point</button>`;
-    $$('[data-quick-score]',bar).forEach(btn=>btn.onclick=()=>window.coachHubRecordStat?.(btn.dataset.quickScore,null));
-  }
-  const anchor=$('#gameAdminBar')||scoreboard;
-  if(bar.previousElementSibling!==anchor)anchor.insertAdjacentElement('afterend',bar);
-}
-
-function enhance(){
-  ensureScoreBar();
-}
+function enhance(){ /* score controls now render natively in coach.js */ }
 
 document.addEventListener('click',event=>{
   const card=event.target.closest?.('.court-player[data-select-player]');
