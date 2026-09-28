@@ -30,26 +30,30 @@ const statDefs = {
   attack_error:  { label:'Error', group:'Attack', k:'E', score:-1, negative:true },
   block_solo:    { label:'Solo', group:'Block', k:'BS', score:1, positive:true },
   block_assist:  { label:'Assist', group:'Block', k:'BA', score:0, positive:true },
-  // Block errors are tracked as a player stat only. Record the actual rally
-  // result separately, so this does not automatically award the opponent a point.
-  block_error:   { label:'Error', group:'Block', k:'BE', score:0, negative:true },
+  block_error:   { label:'Error', group:'Block', k:'BE', score:-1, negative:true },
   pass_3:        { label:'3', group:'Pass', k:'P3', score:0, positive:true },
   pass_2:        { label:'2', group:'Pass', k:'P2', score:0 },
   pass_1:        { label:'1', group:'Pass', k:'P1', score:0 },
   pass_0:        { label:'0', group:'Pass', k:'P0', score:-1, negative:true },
   set_assist:    { label:'Assist', group:'Set', k:'A', score:0, positive:true },
-  // A setting/ball-handling error is a stat entry only. The coach records the
-  // actual rally result separately, so this does NOT automatically award a point.
-  set_error:     { label:'Error', group:'Set', k:'BHE', score:0, negative:true },
+  set_error:     { label:'Error', group:'Set', k:'BHE', score:-1, negative:true },
   dig:           { label:'Dig', group:'Defense', k:'D', score:0, positive:true },
-  // Defensive errors are tracked independently from the scoreboard. Record the
-  // actual rally result separately so the same opponent point is not counted twice.
-  defense_error: { label:'Error', group:'Defense', k:'DE', score:0, negative:true },
+  defense_error: { label:'Error', group:'Defense', k:'DE', score:-1, negative:true },
   team_point:    { label:'Team Point', group:'Score', k:'TP', score:1, positive:true, noPlayer:true },
+  opp_serve_error:{ label:'Opp Serve Error', group:'Score', k:'OSE', score:1, positive:true, noPlayer:true },
   opp_point:     { label:'Opp Point', group:'Score', k:'OP', score:-1, negative:true, noPlayer:true }
 };
 
-const simpleStatTypes = new Set(['serve_ace','serve_in','serve_error','attack_kill','attack_attempt','attack_error','block_solo','block_error','set_assist','dig','defense_error','team_point','opp_point']);
+const simpleStatTypes = new Set(['serve_ace','serve_in','serve_error','attack_kill','attack_attempt','attack_error','block_solo','block_error','set_assist','dig','defense_error','team_point','opp_serve_error','opp_point']);
+
+const correctionStatTypes = [
+  ['serve_ace','ACE'],['serve_in','Serve In'],['serve_error','Serve Err'],
+  ['attack_kill','Kill'],['attack_attempt','Attack'],['attack_error','Attack Err'],
+  ['block_solo','Solo Block'],['block_assist','Block Assist'],['block_error','Block Err'],
+  ['pass_3','Pass 3'],['pass_2','Pass 2'],['pass_1','Pass 1'],['pass_0','Receive Err / 0'],
+  ['set_assist','Assist'],['set_error','Set Err / BHE'],
+  ['dig','Dig'],['defense_error','Def Err']
+];
 const serviceLabels = ['I','II','III','IV','V','VI'];
 
 function activeTeam(){ return state.teams.find(t=>t.id===state.activeTeamId) || null; }
@@ -394,12 +398,44 @@ function eventRow(e){
   const d=statDefs[e.type],p=playerById(e.playerId);return `<div class="event-row"><span>${p?`${playerLabel(p)} — `:''}${esc(d?.group||'')} ${esc(d?.label||e.type)}</span><span class="muted">Set ${e.set}</span></div>`;
 }
 
-async function recordStat(type){
-  const g=activeGame(),d=statDefs[type];if(!g||!d)return;
-  if(!d.noPlayer&&!selectedPlayerId)return alert('Select an active player first.');
-  const e={id:uid('event'),kind:'stat',gameId:g.id,teamId:g.teamId,playerId:d.noPlayer?null:selectedPlayerId,type,set:g.currentSet,scoreImpact:d.score,createdAt:new Date().toISOString()};
-  state.events.push(e);if(d.score>0)g.homeScore+=d.score;if(d.score<0)g.awayScore+=Math.abs(d.score);await persist();render();
+async function recordStatForPlayer(type,playerId=selectedPlayerId,{scoreImpactOverride=null,renderAfter=true,bundleId=null,correction=false}={}){
+  const g=activeGame(),d=statDefs[type];if(!g||!d)return null;
+  if(!d.noPlayer&&!playerId){alert('Select an active player first.');return null;}
+  const impact=scoreImpactOverride===null?d.score:Number(scoreImpactOverride)||0;
+  const e={id:uid('event'),kind:'stat',gameId:g.id,teamId:g.teamId,playerId:d.noPlayer?null:playerId,type,set:g.currentSet,scoreImpact:impact,createdAt:new Date().toISOString()};
+  if(bundleId)e.bundleId=bundleId;
+  if(correction)e.correction=true;
+  state.events.push(e);
+  if(impact>0)g.homeScore+=impact;
+  if(impact<0)g.awayScore+=Math.abs(impact);
+  await persist();
+  if(renderAfter)render();
+  return e;
 }
+
+async function recordStatBundle(entries){
+  const g=activeGame();if(!g||!Array.isArray(entries)||!entries.length)return;
+  const bundleId=uid('bundle');
+  for(let i=0;i<entries.length;i++){
+    const entry=entries[i]||{};
+    const d=statDefs[entry.type];if(!d)continue;
+    const playerId=entry.playerId??null;
+    if(!d.noPlayer&&!playerId)continue;
+    const impact=entry.scoreImpactOverride===undefined?d.score:Number(entry.scoreImpactOverride)||0;
+    const e={id:uid('event'),kind:'stat',gameId:g.id,teamId:g.teamId,playerId:d.noPlayer?null:playerId,type:entry.type,set:g.currentSet,scoreImpact:impact,bundleId,createdAt:new Date().toISOString()};
+    state.events.push(e);
+    if(impact>0)g.homeScore+=impact;
+    if(impact<0)g.awayScore+=Math.abs(impact);
+  }
+  await persist();render();
+}
+
+async function recordStat(type){
+  return recordStatForPlayer(type,selectedPlayerId);
+}
+
+window.coachHubRecordStat=(type,playerId=null,options={})=>recordStatForPlayer(type,playerId,options);
+window.coachHubRecordStatBundle=entries=>recordStatBundle(entries);
 
 function openSubstitutionPicker(kind){
   const g=activeGame(),lineup=currentLineup(g);if(!g||!lineup||!selectedPlayerId)return;
@@ -442,6 +478,17 @@ async function undoEvent(){
   const g=activeGame();if(!g)return;
   const idx=[...state.events].map(e=>e.gameId).lastIndexOf(g.id);if(idx<0)return;
   const e=state.events[idx];if(e.set!==g.currentSet)return alert('The last event belongs to a completed set.');
+
+  if(e.bundleId){
+    const bundled=state.events.filter(x=>x.gameId===g.id&&Number(x.set)===Number(g.currentSet)&&x.bundleId===e.bundleId);
+    for(const item of bundled){
+      if(item.scoreImpact>0)g.homeScore=Math.max(0,g.homeScore-item.scoreImpact);
+      if(item.scoreImpact<0)g.awayScore=Math.max(0,g.awayScore-Math.abs(item.scoreImpact));
+    }
+    state.events=state.events.filter(x=>x.bundleId!==e.bundleId);
+    await persist();render();return;
+  }
+
   if(e.kind==='substitution'||String(e.type).startsWith('sub_')){
     const lineup=currentLineup(g);if(lineup){const slot=e.slot;lineup.currentSlots[slot]=e.outgoingPlayerId;lineup.substitutions=(lineup.substitutions||[]).filter(s=>s.id!==e.id);if(e.previousLiberoReplacement)lineup.liberoReplacements[slot]=e.previousLiberoReplacement;else delete lineup.liberoReplacements[slot];selectedPlayerId=e.outgoingPlayerId;}
   }else{
@@ -475,14 +522,49 @@ function showGameSummary(gameId){
   $('#shareSummary').onclick=()=>shareMatch(g);$('#editMatch').onclick=()=>{$('#modal').close();openGameEditor(g);};$('#modal').showModal();
 }
 
-function openGameEditor(g){
+function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
   const ev=gameEvents(g.id).slice().sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
+  const players=gameRosterPlayers(g);
+  const setNumbers=new Set();
+  (g.sets||[]).forEach((s,i)=>setNumbers.add(Number(s.set)||i+1));
+  ev.forEach(e=>{const n=Number(e.set);if(Number.isFinite(n)&&n>0)setNumbers.add(n);});
+  if(!setNumbers.size)setNumbers.add(1);
+  const sets=[...setNumbers].sort((a,b)=>a-b);
+  const selectedCorrectionPlayer=correctionPlayerId&&players.some(p=>p.id===correctionPlayerId)?correctionPlayerId:(players[0]?.id||'');
+  const selectedCorrectionSet=sets.includes(Number(correctionSetNo))?Number(correctionSetNo):sets[0];
+  const correctionCount=type=>ev.filter(e=>e.playerId===selectedCorrectionPlayer&&Number(e.set)===selectedCorrectionSet&&e.type===type).length;
+
   $('#modalTitle').textContent='Correct Match';
-  $('#modalBody').innerHTML=`<div class="form-grid"><div class="field"><label>Opponent</label><input id="editOpponent" value="${esc(g.opponent||'')}"></div><div class="field"><label>Date</label><input id="editGameDate" type="date" value="${esc(g.date||today())}"></div></div><div class="field"><label>Completed set scores</label><div class="list">${g.sets.map((set,i)=>`<div class="list-item"><strong>Set ${i+1}</strong><div class="set-score-edit"><input inputmode="numeric" data-set-home="${i}" value="${set.home}"><span>–</span><input inputmode="numeric" data-set-away="${i}" value="${set.away}"></div></div>`).join('')||'<div class="muted">No completed sets yet.</div>'}</div></div><div class="field"><label>Event log</label><div class="timeline correction-list">${ev.map(e=>`<div class="event-row"><span>${esc(eventDescription(e))} <span class="muted">• Set ${e.set}</span></span><button type="button" class="btn compact danger" data-delete-event="${e.id}">Delete</button></div>`).join('')||'<div class="muted">No events recorded.</div>'}</div><div class="muted helper">Deleting a stat event corrects totals. Substitution deletion is safest from Undo during the active set; historical deletion removes the log entry but does not reconstruct an old on-court state.</div></div><div class="button-row"><button type="button" class="btn primary" id="saveGameCorrections">Save Corrections</button><button type="button" class="btn danger" id="deleteMatch">Delete Match</button></div>`;
-  $$('[data-delete-event]').forEach(btn=>btn.onclick=async()=>{if(!confirm('Delete this event?'))return;state.events=state.events.filter(e=>e.id!==btn.dataset.deleteEvent);for(const l of Object.values(g.setLineups||{}))l.substitutions=(l.substitutions||[]).filter(s=>s.id!==btn.dataset.deleteEvent);await persist();openGameEditor(g);});
+  $('#modalBody').innerHTML=`<div class="form-grid"><div class="field"><label>Opponent</label><input id="editOpponent" value="${esc(g.opponent||'')}"></div><div class="field"><label>Date</label><input id="editGameDate" type="date" value="${esc(g.date||today())}"></div></div>
+  <div class="field"><label>Completed set scores</label><div class="list">${g.sets.map((set,i)=>`<div class="list-item"><strong>Set ${i+1}</strong><div class="set-score-edit"><input inputmode="numeric" data-set-home="${i}" value="${set.home}"><span>–</span><input inputmode="numeric" data-set-away="${i}" value="${set.away}"></div></div>`).join('')||'<div class="muted">No completed sets yet.</div>'}</div></div>
+  <hr>
+  <div class="field"><label>Player Stat Corrections</label><div class="form-grid"><div class="field"><label>Player</label><select id="correctionPlayer">${players.map(p=>`<option value="${p.id}" ${p.id===selectedCorrectionPlayer?'selected':''}>${playerLabel(p)}</option>`).join('')}</select></div><div class="field"><label>Set</label><select id="correctionSet">${sets.map(n=>`<option value="${n}" ${n===selectedCorrectionSet?'selected':''}>Set ${n}</option>`).join('')}</select></div></div><div class="stat-correction-grid">${correctionStatTypes.map(([type,label])=>`<div class="stat-correction-item"><span>${esc(label)}</span><div class="stat-correction-stepper"><button type="button" class="btn compact" data-correct-stat="${type}" data-delta="-1">−</button><strong>${correctionCount(type)}</strong><button type="button" class="btn compact primary" data-correct-stat="${type}" data-delta="1">+</button></div></div>`).join('')}</div><div class="muted helper">Corrections change the player's stats only. Saved set scores are not changed. “Attack” is a non-terminal attack attempt; kills and attack errors already count as attempts.</div></div>
+  <hr>
+  <div class="field"><label>Event log</label><div class="timeline correction-list">${ev.map(e=>`<div class="event-row"><span>${esc(eventDescription(e))} <span class="muted">• Set ${e.set}</span></span><button type="button" class="btn compact danger" data-delete-event="${e.id}">Delete</button></div>`).join('')||'<div class="muted">No events recorded.</div>'}</div><div class="muted helper">Deleting an event corrects totals. Player Stat Corrections above are usually faster for simple +/- fixes.</div></div>
+  <div class="button-row"><button type="button" class="btn primary" id="saveGameCorrections">Save Corrections</button><button type="button" class="btn danger" id="deleteMatch">Delete Match</button></div>`;
+
+  $('#correctionPlayer')?.addEventListener('change',e=>openGameEditor(g,e.target.value,$('#correctionSet')?.value));
+  $('#correctionSet')?.addEventListener('change',e=>openGameEditor(g,$('#correctionPlayer')?.value,Number(e.target.value)));
+
+  $$('[data-correct-stat]').forEach(btn=>btn.onclick=async()=>{
+    const type=btn.dataset.correctStat,delta=Number(btn.dataset.delta)||0;
+    const playerId=$('#correctionPlayer')?.value||selectedCorrectionPlayer;
+    const setNo=Number($('#correctionSet')?.value)||selectedCorrectionSet;
+    if(!playerId||!statDefs[type])return;
+    if(delta>0){
+      state.events.push({id:uid('event'),kind:'stat',gameId:g.id,teamId:g.teamId,playerId,type,set:setNo,scoreImpact:0,correction:true,createdAt:new Date().toISOString()});
+    }else{
+      const idx=[...state.events].map((e,i)=>({e,i})).reverse().find(x=>x.e.gameId===g.id&&x.e.playerId===playerId&&Number(x.e.set)===setNo&&x.e.type===type)?.i;
+      if(idx===undefined)return;
+      state.events.splice(idx,1);
+    }
+    await persist();openGameEditor(g,playerId,setNo);
+  });
+
+  $$('[data-delete-event]').forEach(btn=>btn.onclick=async()=>{if(!confirm('Delete this event?'))return;state.events=state.events.filter(e=>e.id!==btn.dataset.deleteEvent);for(const l of Object.values(g.setLineups||{}))l.substitutions=(l.substitutions||[]).filter(s=>s.id!==btn.dataset.deleteEvent);await persist();openGameEditor(g,selectedCorrectionPlayer,selectedCorrectionSet);});
   $('#saveGameCorrections').onclick=async()=>{g.opponent=$('#editOpponent').value.trim()||'Opponent';g.date=$('#editGameDate').value||today();$$('[data-set-home]').forEach(input=>{const i=+input.dataset.setHome;g.sets[i].home=Math.max(0,+input.value||0);});$$('[data-set-away]').forEach(input=>{const i=+input.dataset.setAway;g.sets[i].away=Math.max(0,+input.value||0);});await persist();$('#modal').close();showGameSummary(g.id);render();};
   $('#deleteMatch').onclick=async()=>{if(!confirm(`Permanently delete the match vs ${g.opponent} and all of its stats?`))return;state.events=state.events.filter(e=>e.gameId!==g.id);state.games=state.games.filter(x=>x.id!==g.id);if(state.activeGameId===g.id)state.activeGameId=null;await persist();$('#modal').close();setView('games');};
-  $('#modal').showModal();
+  if(!$('#modal').open)$('#modal').showModal();
 }
 
 function matchSummaryText(g){
