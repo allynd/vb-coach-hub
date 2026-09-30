@@ -136,9 +136,14 @@ async function openQuickStats(playerId){
     if(btn.dataset.quickStat==='attack_kill')showKillChoices(playerId);
     else record(btn.dataset.quickStat,playerId);
   });
-  $$('[data-quick-sub]',dialog).forEach(btn=>btn.onclick=()=>{
+  $('[data-quick-sub]',dialog).forEach(btn=>btn.onclick=()=>{
     const kind=btn.dataset.quickSub;
     dialog.close();
+    if(typeof window.coachHubOpenSubstitution==='function'){
+      const opened=window.coachHubOpenSubstitution(kind,playerId);
+      if(!opened)alert('Could not open the substitution picker for this player.');
+      return;
+    }
     const target=kind==='regular'?$('#regularSub'):kind==='serve'?$('#serveSub'):$('#liberoSub');
     target?.click();
   });
