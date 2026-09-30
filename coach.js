@@ -446,7 +446,12 @@ function openSubstitutionPicker(kind){
   if(kind==='libero_return'){
     const originalId=lineup.liberoReplacements?.[slot];const original=playerById(originalId);candidates=original?[original]:[];title='Libero Return';help='Return the player who was replaced by the libero.';
   }else if(kind==='libero'){
-    candidates=benchIds(g).map(playerById).filter(p=>p&&isLiberoRole(p));title='Libero Sub';help='Only roster players whose PRIMARY position is L or DS are shown.';
+    const activeLiberoId=lineup.liberos?.[0]||null;
+    const activeLibero=activeLiberoId?playerById(activeLiberoId):null;
+    const available=new Set(benchIds(g));
+    candidates=activeLibero&&available.has(activeLiberoId)&&isLiberoRole(activeLibero)?[activeLibero]:[];
+    title='Libero Sub';
+    help=activeLiberoId?'Only the Active Libero listed for this set may enter.':'No Active Libero is listed for this set. Edit the set lineup to designate one.';
   }else if(kind==='serve'){
     candidates=benchIds(g).map(playerById).filter(Boolean);title='Serve Sub';help='Choose the serving specialist entering this service-order position.';
   }else{
@@ -458,11 +463,28 @@ function openSubstitutionPicker(kind){
   $('#modal').showModal();
 }
 
+window.coachHubOpenSubstitution=(kind,playerId=null)=>{
+  const g=activeGame(),lineup=currentLineup(g);
+  if(!g||!lineup)return false;
+  const active=activeSix(g);
+  if(playerId&&active.includes(playerId))selectedPlayerId=playerId;
+  if(!selectedPlayerId||!active.includes(selectedPlayerId))return false;
+  const slot=active.indexOf(selectedPlayerId);
+  const actualKind=kind==='libero'&&lineup.liberoReplacements?.[slot]?'libero_return':kind;
+  openSubstitutionPicker(actualKind);
+  return true;
+};
+
 async function applySubstitution(kind,slot,incomingId){
   const g=activeGame(),lineup=currentLineup(g);if(!g||!lineup)return;
   const outgoingId=lineup.currentSlots[slot];if(!outgoingId||incomingId===outgoingId)return;
   if(lineup.currentSlots.includes(incomingId))return alert('That player is already on court.');
-  if(kind==='libero'&&!isLiberoRole(playerById(incomingId)))return alert('Libero Sub only allows players whose primary position is L or DS.');
+  if(kind==='libero'){
+    const activeLiberoId=lineup.liberos?.[0]||null;
+    if(!activeLiberoId)return alert('No Active Libero is designated for this set.');
+    if(incomingId!==activeLiberoId)return alert('Only the Active Libero designated for this set may enter.');
+    if(!isLiberoRole(playerById(incomingId)))return alert('The Active Libero must have primary position L or DS.');
+  }
   const previousLiberoReplacement=lineup.liberoReplacements?.[slot]||null;
   if(kind==='libero')lineup.liberoReplacements[slot]=outgoingId;
   if(kind==='libero_return')delete lineup.liberoReplacements[slot];
