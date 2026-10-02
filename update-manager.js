@@ -1,4 +1,4 @@
-const BUILD_VERSION = '15.12';
+const BUILD_VERSION = '15.13';
 
 function addVersionUI(){
   const actions=document.querySelector('.topbar-actions');
