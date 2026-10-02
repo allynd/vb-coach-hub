@@ -120,9 +120,20 @@ function teamRecord(teamId){
   return {w,l};
 }
 
+function statEventValue(e){
+  return e?.kind==='season_adjustment' ? (Number(e.adjustmentDelta)||0) : 1;
+}
+
+function statTypeCount(events,type,playerId=null){
+  const total=(events||[])
+    .filter(e=>e?.type===type && (!playerId || e.playerId===playerId))
+    .reduce((sum,e)=>sum+statEventValue(e),0);
+  return Math.max(0,total);
+}
+
 function summarizeEvents(events, playerId=null){
   const ev = playerId ? events.filter(e=>e.playerId===playerId) : events.filter(e=>e.playerId);
-  const count = type => ev.filter(e=>e.type===type).length;
+  const count = type => statTypeCount(ev,type);
   const K=count('attack_kill'), E=count('attack_error'), attOther=count('attack_attempt');
   const ATT=K+E+attOther;
   const ace=count('serve_ace'), sin=count('serve_in'), se=count('serve_error'), SA=ace+sin+se;
@@ -136,11 +147,14 @@ function summarizeEvents(events, playerId=null){
   };
 }
 
-function playerSeasonStats(p, teamId=state.activeTeamId){
+function seasonEvents(teamId=state.activeTeamId){
   const games=state.games.filter(g=>g.teamId===teamId);
   const ids=new Set(games.map(g=>g.id));
-  const ev=state.events.filter(e=>ids.has(e.gameId));
-  return summarizeEvents(ev,p.id);
+  return state.events.filter(e=>ids.has(e.gameId)||(e.kind==='season_adjustment'&&e.teamId===teamId));
+}
+
+function playerSeasonStats(p, teamId=state.activeTeamId){
+  return summarizeEvents(seasonEvents(teamId),p.id);
 }
 
 function header(){
@@ -171,7 +185,7 @@ function renderDashboard(){
   const t=activeTeam(), rec=teamRecord(t.id), games=state.games.filter(g=>g.teamId===t.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const latest=games.find(g=>g.complete) || games[0];
   const gameIds=new Set(games.map(g=>g.id));
-  const ts=summarizeEvents(state.events.filter(e=>gameIds.has(e.gameId)));
+  const ts=summarizeEvents(seasonEvents(t.id));
   const players=teamPlayers().map(p=>({p,s:playerSeasonStats(p)}));
   const leaders=[
     ['Kills', [...players].sort((a,b)=>b.s.K-a.s.K)[0]],
@@ -219,17 +233,67 @@ function showPlayerProfile(id){
   const games=state.games.filter(g=>g.teamId===p.teamId);
   const rows=games.map(g=>({g,s:summarizeEvents(gameEvents(g.id),p.id)})).filter(x=>Object.values(x.s).some(v=>typeof v==='number'&&v!==0));
   $('#modalTitle').textContent='Player Profile';
-  $('#modalBody').innerHTML=`<div class="profile-head">${avatar(p)}<div><h2>#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</h2><div class="muted">${esc(p.position||'Player')}${p.secondaryPosition?` / ${esc(p.secondaryPosition)}`:''} • ${esc(t?.school||t?.name||'')}</div></div></div><div class="stat-strip" style="margin-top:16px"><div class="metric"><span>Kills</span><b>${s.K}</b></div><div class="metric"><span>Hit %</span><b>${fmtPct(s.HIT)}</b></div><div class="metric"><span>Aces</span><b>${s.ACE}</b></div><div class="metric"><span>Digs</span><b>${s.D}</b></div></div><hr><div class="grid two"><div><div class="muted">Height</div><strong>${esc(p.height||'—')}</strong></div><div><div class="muted">Class</div><strong>${esc(p.gradYear||'—')}</strong></div><div><div class="muted">Dominant hand</div><strong>${esc(p.hand||'—')}</strong></div><div><div class="muted">Block errors</div><strong>${s.BE}</strong></div><div><div class="muted">Defensive errors</div><strong>${s.DE}</strong></div><div><div class="muted">Pass avg</div><strong>${s.PASS.toFixed(2)}</strong></div></div><hr><h3>Career</h3><div class="stat-strip"><div class="metric"><span>Kills</span><b>${career.K}</b></div><div class="metric"><span>Aces</span><b>${career.ACE}</b></div><div class="metric"><span>Assists</span><b>${career.A}</b></div><div class="metric"><span>Digs</span><b>${career.D}</b></div></div>${p.notes?`<hr><div class="muted">Coach notes</div><p>${esc(p.notes)}</p>`:''}<hr><div class="button-row"><button type="button" class="btn" id="editPlayer">Edit Profile</button><button type="button" class="btn primary" id="sharePlayer">Share Player Summary</button></div><hr><h3>Game Log</h3><div class="list">${rows.map(({g,s})=>`<div class="list-item"><div><strong>${esc(g.opponent)}</strong><div class="muted">${esc(g.date)}</div></div><div>K ${s.K} • A ${s.A} • D ${s.D} • BE ${s.BE} • DE ${s.DE}</div></div>`).join('')||'<div class="muted">No game stats yet.</div>'}</div>`;
+  $('#modalBody').innerHTML=`<div class="profile-head">${avatar(p)}<div><h2>#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</h2><div class="muted">${esc(p.position||'Player')}${p.secondaryPosition?` / ${esc(p.secondaryPosition)}`:''} • ${esc(t?.school||t?.name||'')}</div></div></div><div class="stat-strip" style="margin-top:16px"><div class="metric"><span>Kills</span><b>${s.K}</b></div><div class="metric"><span>Hit %</span><b>${fmtPct(s.HIT)}</b></div><div class="metric"><span>Aces</span><b>${s.ACE}</b></div><div class="metric"><span>Digs</span><b>${s.D}</b></div></div><hr><div class="grid two"><div><div class="muted">Height</div><strong>${esc(p.height||'—')}</strong></div><div><div class="muted">Class</div><strong>${esc(p.gradYear||'—')}</strong></div><div><div class="muted">Dominant hand</div><strong>${esc(p.hand||'—')}</strong></div><div><div class="muted">Block errors</div><strong>${s.BE}</strong></div><div><div class="muted">Defensive errors</div><strong>${s.DE}</strong></div><div><div class="muted">Pass avg</div><strong>${s.PASS.toFixed(2)}</strong></div></div><hr><h3>Career</h3><div class="stat-strip"><div class="metric"><span>Kills</span><b>${career.K}</b></div><div class="metric"><span>Aces</span><b>${career.ACE}</b></div><div class="metric"><span>Assists</span><b>${career.A}</b></div><div class="metric"><span>Digs</span><b>${career.D}</b></div></div>${p.notes?`<hr><div class="muted">Coach notes</div><p>${esc(p.notes)}</p>`:''}<hr><div class="button-row"><button type="button" class="btn" id="editPlayer">Edit Profile</button><button type="button" class="btn" id="adjustPlayerStats">Adjust Stats</button><button type="button" class="btn primary" id="sharePlayer">Share Player Summary</button></div><hr><h3>Game Log</h3><div class="list">${rows.map(({g,s})=>`<div class="list-item"><div><strong>${esc(g.opponent)}</strong><div class="muted">${esc(g.date)}</div></div><div>K ${s.K} • A ${s.A} • D ${s.D} • BE ${s.BE} • DE ${s.DE}</div></div>`).join('')||'<div class="muted">No game stats yet.</div>'}</div>`;
   $('#editPlayer').onclick=()=>{ $('#modal').close(); openPlayerEditor(p); };
+  $('#adjustPlayerStats').onclick=()=>openPlayerStatAdjuster(p.id);
   $('#sharePlayer').onclick=()=>sharePlayerSummary(p);
   $('#modal').showModal();
+}
+
+function playerAdjustmentRows(p){
+  const season=seasonEvents(p.teamId);
+  return correctionStatTypes.map(([type,label])=>({
+    type,label,count:statTypeCount(season,type,p.id)
+  }));
+}
+
+function openPlayerStatAdjuster(playerId){
+  const p=playerById(playerId);if(!p)return;
+  const rows=playerAdjustmentRows(p);
+  const adjustments=state.events.filter(e=>e.kind==='season_adjustment'&&e.teamId===p.teamId&&e.playerId===p.id);
+  $('#modalTitle').textContent=`Adjust Stats • #${p.jersey||'—'} ${p.firstName} ${p.lastName}`;
+  $('#modalBody').innerHTML=`
+    <div class="notice"><strong>Season-level correction</strong><div class="muted">Use this for film review or stat corrections that should change overall totals without editing a specific match or set. Historical game scores and game logs stay unchanged.</div></div>
+    <div class="stat-correction-grid" style="margin-top:12px">
+      ${rows.map(row=>`<div class="stat-correction-item"><span>${esc(row.label)}</span><div class="stat-correction-stepper"><button type="button" class="btn compact" data-season-adjust="${row.type}" data-delta="-1" ${row.count<=0?'disabled':''}>−</button><strong>${row.count}</strong><button type="button" class="btn compact primary" data-season-adjust="${row.type}" data-delta="1">+</button></div></div>`).join('')}
+    </div>
+    <div class="muted helper" style="margin-top:12px">Kills and attack errors automatically count toward attack attempts. Serve results count toward serve attempts. Pass 0/1/2/3 corrections recalculate passing average automatically.</div>
+    ${adjustments.length?`<hr><div class="muted">Film/overall adjustments saved for this player: ${adjustments.length}</div>`:''}
+    <div class="button-row" style="margin-top:14px"><button type="button" class="btn" id="backToPlayerProfile">Back to Player</button></div>`;
+
+  $$('[data-season-adjust]').forEach(btn=>btn.onclick=async()=>{
+    const type=btn.dataset.seasonAdjust;
+    const delta=Number(btn.dataset.delta)||0;
+    if(!statDefs[type]||!delta)return;
+    const current=statTypeCount(seasonEvents(p.teamId),type,p.id);
+    if(delta<0&&current<=0)return;
+
+    state.events.push({
+      id:uid('adjustment'),
+      kind:'season_adjustment',
+      teamId:p.teamId,
+      gameId:null,
+      playerId:p.id,
+      type,
+      set:null,
+      scoreImpact:0,
+      adjustmentDelta:delta,
+      source:'film_correction',
+      createdAt:new Date().toISOString()
+    });
+    await persist();
+    render();
+    openPlayerStatAdjuster(p.id);
+  });
+  $('#backToPlayerProfile').onclick=()=>showPlayerProfile(p.id);
+  if(!$('#modal').open)$('#modal').showModal();
 }
 
 function renderStats(){
   const players=teamPlayers();
   const games=state.games.filter(g=>g.teamId===state.activeTeamId);
   const gameIds=new Set(games.map(g=>g.id));
-  const teamStats=summarizeEvents(state.events.filter(e=>gameIds.has(e.gameId)));
+  const teamStats=summarizeEvents(seasonEvents(state.activeTeamId));
   $('#main').innerHTML=`<div class="section-head"><div><h2>Season Stats</h2><div class="muted">Calculated from the underlying match event log.</div></div><div class="button-row"><button class="btn" id="csvStats">Export CSV</button><button class="btn primary" id="shareStats">Share Summary</button></div></div><div class="stat-strip" style="margin-bottom:14px"><div class="metric"><span class="muted">Team Hit %</span><b>${fmtPct(teamStats.HIT)}</b></div><div class="metric"><span class="muted">Serve In %</span><b>${Math.round(teamStats.SERVE*100)}%</b></div><div class="metric"><span class="muted">Pass Avg</span><b>${teamStats.PASS.toFixed(2)}</b></div><div class="metric"><span class="muted">Aces</span><b>${teamStats.ACE}</b></div></div><div class="table-wrap"><table><thead><tr><th>Player</th><th>K</th><th>E</th><th>ATT</th><th>HIT%</th><th>ACE</th><th>SE</th><th>BS</th><th>BA</th><th>BE</th><th>AST</th><th>DIG</th><th>DE</th><th>BHE</th><th>PASS</th></tr></thead><tbody>${players.map(p=>{const s=playerSeasonStats(p);return `<tr><td>#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</td><td>${s.K}</td><td>${s.E}</td><td>${s.ATT}</td><td>${fmtPct(s.HIT)}</td><td>${s.ACE}</td><td>${s.SE}</td><td>${s.BS}</td><td>${s.BA}</td><td>${s.BE}</td><td>${s.A}</td><td>${s.D}</td><td>${s.DE}</td><td>${s.BHE}</td><td>${s.PASS.toFixed(2)}</td></tr>`;}).join('')}</tbody></table></div>`;
   $('#csvStats').onclick=exportSeasonCsv;
   $('#shareStats').onclick=shareSeasonSummary;
