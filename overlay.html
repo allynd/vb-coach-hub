@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#00000000">
+  <title>Coach Hub Live Score</title>
+  <link rel="stylesheet" href="./overlay.css?v=15.15">
+</head>
+<body>
+  <main id="overlay" class="overlay-shell waiting" aria-live="polite">
+    <section class="score-widget">
+      <div class="team-side home-side">
+        <div class="logo-box"><img id="homeLogo" alt=""><span id="homeFallback">V</span></div>
+        <div class="team-copy">
+          <div class="team-name" id="homeName">TEAM</div>
+          <div class="serve-tag" id="homeServe">SERVE</div>
+        </div>
+        <div class="score" id="homeScore">0</div>
+      </div>
+
+      <div class="match-center">
+        <div class="live-label" id="liveLabel">LIVE</div>
+        <div class="set-label" id="setLabel">SET 1</div>
+        <div class="set-wins"><span id="homeSets">0</span><span class="dash">–</span><span id="awaySets">0</span></div>
+      </div>
+
+      <div class="team-side away-side">
+        <div class="score" id="awayScore">0</div>
+        <div class="team-copy">
+          <div class="team-name" id="awayName">OPPONENT</div>
+          <div class="serve-tag" id="awayServe">SERVE</div>
+        </div>
+        <div class="logo-box"><img id="awayLogo" alt=""><span id="awayFallback">O</span></div>
+      </div>
+
+      <div class="set-history" id="setHistory">Waiting for live score…</div>
+      <div class="feed-status" id="feedStatus"></div>
+    </section>
+  </main>
+  <script type="module" src="./overlay.js?v=15.15"></script>
+</body>
+</html>
