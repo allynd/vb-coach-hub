@@ -160,7 +160,7 @@ async function publish(force=false){
   try{
     const state=await loadState();
     const {team,game}=activeContext(state,config?.match_id);
-    if(!team||!game)return;
+    if(!team||!game||team.id!==config?.team_id)return;
     if(mediaForTeamId!==team.id)await refreshMediaUrls(team,config);
 
     const stable=buildState(state,team,game);
