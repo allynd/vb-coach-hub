@@ -136,7 +136,7 @@ async function openQuickStats(playerId){
     if(btn.dataset.quickStat==='attack_kill')showKillChoices(playerId);
     else record(btn.dataset.quickStat,playerId);
   });
-  $('[data-quick-sub]',dialog).forEach(btn=>btn.onclick=()=>{
+  $$('[data-quick-sub]',dialog).forEach(btn=>btn.onclick=()=>{
     const kind=btn.dataset.quickSub;
     dialog.close();
     if(typeof window.coachHubOpenSubstitution==='function'){
