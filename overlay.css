@@ -1,0 +1,93 @@
+:root{
+  color-scheme:dark;
+  font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;background:transparent!important;overflow:hidden}
+body{display:flex;align-items:flex-end;justify-content:center;padding:1.5vw}
+.overlay-shell{width:100%;display:flex;justify-content:center;transition:opacity .18s ease}
+.overlay-shell.waiting{opacity:.82}
+.score-widget{
+  position:relative;
+  width:min(1180px,98vw);
+  min-height:118px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 150px minmax(0,1fr);
+  grid-template-areas:
+    "home center away"
+    "history history history";
+  align-items:stretch;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.28);
+  border-radius:22px;
+  background:linear-gradient(180deg,rgba(15,23,42,.94),rgba(2,6,23,.94));
+  box-shadow:0 16px 42px rgba(0,0,0,.34),inset 0 1px rgba(255,255,255,.08);
+  color:white;
+  backdrop-filter:blur(12px);
+}
+.team-side{
+  min-width:0;
+  display:grid;
+  align-items:center;
+  gap:12px;
+  padding:14px 18px 10px;
+}
+.home-side{grid-area:home;grid-template-columns:62px minmax(0,1fr) auto}
+.away-side{grid-area:away;grid-template-columns:auto minmax(0,1fr) 62px}
+.logo-box{
+  width:58px;height:58px;border-radius:14px;overflow:hidden;display:grid;place-items:center;
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);
+  font-size:24px;font-weight:900
+}
+.logo-box img{width:100%;height:100%;object-fit:contain;display:none}
+.logo-box.has-logo img{display:block}
+.logo-box.has-logo span{display:none}
+.team-copy{min-width:0}
+.away-side .team-copy{text-align:right}
+.team-name{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:clamp(15px,2.1vw,28px);font-weight:900;letter-spacing:.02em;text-transform:uppercase
+}
+.score{font-size:clamp(44px,7vw,78px);line-height:.9;font-weight:950;font-variant-numeric:tabular-nums}
+.serve-tag{
+  display:inline-flex;margin-top:6px;padding:3px 7px;border-radius:999px;
+  font-size:10px;font-weight:900;letter-spacing:.12em;
+  background:rgba(255,255,255,.14);opacity:0
+}
+.serve-tag.active{opacity:1;background:white;color:#0f172a}
+.match-center{
+  grid-area:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  border-left:1px solid rgba(255,255,255,.14);border-right:1px solid rgba(255,255,255,.14);
+  padding:10px 8px
+}
+.live-label{font-size:9px;font-weight:900;letter-spacing:.22em;color:#fca5a5}
+.set-label{font-size:18px;font-weight:950;margin-top:3px;white-space:nowrap}
+.set-wins{display:flex;gap:7px;align-items:center;margin-top:4px;font-size:13px;font-weight:800;color:#cbd5e1}
+.set-wins .dash{opacity:.55}
+.set-history{
+  grid-area:history;
+  min-width:0;
+  padding:7px 14px 8px;
+  border-top:1px solid rgba(255,255,255,.12);
+  text-align:center;
+  font-size:11px;font-weight:700;letter-spacing:.02em;color:#cbd5e1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+.feed-status{
+  position:absolute;right:10px;bottom:7px;font-size:8px;font-weight:800;letter-spacing:.08em;
+  color:#fbbf24;text-transform:uppercase
+}
+@media (max-width:700px){
+  .score-widget{grid-template-columns:minmax(0,1fr) 92px minmax(0,1fr);border-radius:16px}
+  .team-side{gap:7px;padding:10px 10px 8px}
+  .home-side{grid-template-columns:42px minmax(0,1fr) auto}
+  .away-side{grid-template-columns:auto minmax(0,1fr) 42px}
+  .logo-box{width:40px;height:40px;border-radius:10px;font-size:17px}
+  .team-name{font-size:clamp(11px,3.3vw,18px)}
+  .score{font-size:clamp(34px,9vw,56px)}
+  .set-label{font-size:13px}
+  .set-wins{font-size:10px}
+  .live-label{font-size:7px}
+  .set-history{font-size:9px;padding:5px 8px 6px}
+}
