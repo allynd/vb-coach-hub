@@ -254,7 +254,11 @@ export async function syncFullActiveTeam(){
       if(e.kind==='substitution'||String(e.type||'').startsWith('sub_')) subMap.set(e.id,e);
     }
     const subRows=[...subMap.values()].map(s=>localSubToCloud(s,user.id));
-    const statRows=localEvents.filter(e=>!(e.kind==='substitution'||String(e.type||'').startsWith('sub_'))).map(e=>localStatToCloud(e,user.id));
+    // Season-level film/stat adjustments are intentionally snapshot-only.
+    // The normalized stat_events table is match-scoped and requires a real match_id.
+    const statRows=localEvents
+      .filter(e=>e.kind!=='season_adjustment'&&e.gameId&&!(e.kind==='substitution'||String(e.type||'').startsWith('sub_')))
+      .map(e=>localStatToCloud(e,user.id));
     await reconcileIdTable(supabase,'substitutions',team.id,subRows,'id');
     await reconcileIdTable(supabase,'stat_events',team.id,statRows,'id');
 
@@ -274,7 +278,8 @@ export async function syncFullActiveTeam(){
     const {error:snapshotError}=await supabase.from('team_snapshots').upsert({team_id:team.id,snapshot,updated_by:user.id},{onConflict:'team_id'});
     if(snapshotError) throw snapshotError;
 
-    return {message:`Full sync complete: ${localPlayers.length} players, ${games.length} matches, ${setRows.length} sets, ${subRows.length} substitutions, and ${statRows.length} stat events are in the cloud.`,teamId:team.id};
+    const adjustmentCount=localEvents.filter(e=>e.kind==='season_adjustment').length;
+    return {message:`Full sync complete: ${localPlayers.length} players, ${games.length} matches, ${setRows.length} sets, ${subRows.length} substitutions, ${statRows.length} match stat events, and ${adjustmentCount} season adjustments are backed up.`,teamId:team.id};
   }catch(e){
     console.error('Full cloud sync failed',e);
     throw new Error(describeSyncError(e));
