@@ -1,4 +1,4 @@
-const CACHE='volleyball-coach-hub-v15.14';
+const CACHE='volleyball-coach-hub-v15.14-r2';
 const ASSETS=['./','./index.html','./coach.css?v=15.14','./minor-ui.css?v=15.14','./gameday-controls.css?v=15.14','./gameday-quickstats.css?v=15.14','./coach.js?v=15.14','./history-delete.js?v=15.14','./manual-results.js?v=15.14','./conference.js?v=15.14','./cloud.js?v=15.14','./cloud-v14.js?v=15.14','./team-invites.js?v=15.14','./team-membership.js?v=15.14','./dashboard-results.js?v=15.14','./restore-fix.js?v=15.14','./class-year.js?v=15.14','./gameday-controls.js?v=15.14','./libero-active.js?v=15.14','./gameday-quickstats.js?v=15.14','./cloud-restore.js','./cloud-sync.js','./update-manager.js?v=15.14','./supabase-config.js','./db.js','./manifest.webmanifest','./icon-180.png','./icon-192.png','./icon-512.png'];
 
 self.addEventListener('install',event=>{
