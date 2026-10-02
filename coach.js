@@ -237,7 +237,7 @@ function showPlayerProfile(id){
   $('#editPlayer').onclick=()=>{ $('#modal').close(); openPlayerEditor(p); };
   $('#adjustPlayerStats').onclick=()=>openPlayerStatAdjuster(p.id);
   $('#sharePlayer').onclick=()=>sharePlayerSummary(p);
-  $('#modal').showModal();
+  if(!$('#modal').open)$('#modal').showModal();
 }
 
 function playerAdjustmentRows(p){
@@ -294,7 +294,7 @@ function renderStats(){
   const games=state.games.filter(g=>g.teamId===state.activeTeamId);
   const gameIds=new Set(games.map(g=>g.id));
   const teamStats=summarizeEvents(seasonEvents(state.activeTeamId));
-  $('#main').innerHTML=`<div class="section-head"><div><h2>Season Stats</h2><div class="muted">Calculated from the underlying match event log.</div></div><div class="button-row"><button class="btn" id="csvStats">Export CSV</button><button class="btn primary" id="shareStats">Share Summary</button></div></div><div class="stat-strip" style="margin-bottom:14px"><div class="metric"><span class="muted">Team Hit %</span><b>${fmtPct(teamStats.HIT)}</b></div><div class="metric"><span class="muted">Serve In %</span><b>${Math.round(teamStats.SERVE*100)}%</b></div><div class="metric"><span class="muted">Pass Avg</span><b>${teamStats.PASS.toFixed(2)}</b></div><div class="metric"><span class="muted">Aces</span><b>${teamStats.ACE}</b></div></div><div class="table-wrap"><table><thead><tr><th>Player</th><th>K</th><th>E</th><th>ATT</th><th>HIT%</th><th>ACE</th><th>SE</th><th>BS</th><th>BA</th><th>BE</th><th>AST</th><th>DIG</th><th>DE</th><th>BHE</th><th>PASS</th></tr></thead><tbody>${players.map(p=>{const s=playerSeasonStats(p);return `<tr><td>#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</td><td>${s.K}</td><td>${s.E}</td><td>${s.ATT}</td><td>${fmtPct(s.HIT)}</td><td>${s.ACE}</td><td>${s.SE}</td><td>${s.BS}</td><td>${s.BA}</td><td>${s.BE}</td><td>${s.A}</td><td>${s.D}</td><td>${s.DE}</td><td>${s.BHE}</td><td>${s.PASS.toFixed(2)}</td></tr>`;}).join('')}</tbody></table></div>`;
+  $('#main').innerHTML=`<div class="section-head"><div><h2>Season Stats</h2><div class="muted">Calculated from match events plus season-level corrections.</div></div><div class="button-row"><button class="btn" id="csvStats">Export CSV</button><button class="btn primary" id="shareStats">Share Summary</button></div></div><div class="stat-strip" style="margin-bottom:14px"><div class="metric"><span class="muted">Team Hit %</span><b>${fmtPct(teamStats.HIT)}</b></div><div class="metric"><span class="muted">Serve In %</span><b>${Math.round(teamStats.SERVE*100)}%</b></div><div class="metric"><span class="muted">Pass Avg</span><b>${teamStats.PASS.toFixed(2)}</b></div><div class="metric"><span class="muted">Aces</span><b>${teamStats.ACE}</b></div></div><div class="table-wrap"><table><thead><tr><th>Player</th><th>K</th><th>E</th><th>ATT</th><th>HIT%</th><th>ACE</th><th>SE</th><th>BS</th><th>BA</th><th>BE</th><th>AST</th><th>DIG</th><th>DE</th><th>BHE</th><th>PASS</th></tr></thead><tbody>${players.map(p=>{const s=playerSeasonStats(p);return `<tr><td>#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</td><td>${s.K}</td><td>${s.E}</td><td>${s.ATT}</td><td>${fmtPct(s.HIT)}</td><td>${s.ACE}</td><td>${s.SE}</td><td>${s.BS}</td><td>${s.BA}</td><td>${s.BE}</td><td>${s.A}</td><td>${s.D}</td><td>${s.DE}</td><td>${s.BHE}</td><td>${s.PASS.toFixed(2)}</td></tr>`;}).join('')}</tbody></table></div>`;
   $('#csvStats').onclick=exportSeasonCsv;
   $('#shareStats').onclick=shareSeasonSummary;
 }
