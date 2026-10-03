@@ -1,3 +1,4 @@
+.bottom-nav{grid-template-columns:repeat(8,minmax(70px,1fr));}
 /* 15.20 Stream Control page */
 .stream-control-shell{display:grid;gap:14px;max-width:980px;margin:0 auto}
 .stream-control-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
