@@ -8,7 +8,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Coach Hub Live Score</title>
-  <link rel="stylesheet" href="./overlay.css?v=15.18">
+  <link rel="stylesheet" href="./overlay.css?v=15.19">
 </head>
 <body>
   <main id="overlay" class="overlay-shell waiting" aria-live="polite">
@@ -19,43 +19,44 @@
       </div>
 
       <div class="team-side home-side">
-        <div class="logo-box"><img id="homeLogo" alt=""><span id="homeFallback">V</span></div>
+        <div class="logo-wrap">
+          <div class="logo-glow"></div>
+          <div class="logo-box"><img id="homeLogo" alt=""><span id="homeFallback">V</span></div>
+        </div>
         <div class="team-copy">
           <div class="team-name" id="homeName">TEAM</div>
           <div class="team-meta">
             <span class="sets-mini">SETS <strong id="homeSets">0</strong></span>
-            <span class="serve-tag" id="homeServe">SERVING</span>
+            <span class="serve-inline" id="homeServe">SERVING</span>
           </div>
         </div>
-        <div class="score-tile">
-          <div class="score" id="homeScore">0</div>
-        </div>
+        <div class="score-tile"><div class="score" id="homeScore">0</div></div>
       </div>
 
       <div class="match-center">
         <div class="set-caption">CURRENT</div>
         <div class="set-label" id="setLabel">SET 1</div>
-        <div class="center-mark">VOLLEYBALL</div>
       </div>
 
       <div class="team-side away-side">
-        <div class="score-tile">
-          <div class="score" id="awayScore">0</div>
-        </div>
+        <div class="score-tile"><div class="score" id="awayScore">0</div></div>
         <div class="team-copy">
           <div class="team-name" id="awayName">OPPONENT</div>
           <div class="team-meta">
-            <span class="serve-tag" id="awayServe">SERVING</span>
+            <span class="serve-inline" id="awayServe">SERVING</span>
             <span class="sets-mini">SETS <strong id="awaySets">0</strong></span>
           </div>
         </div>
-        <div class="logo-box"><img id="awayLogo" alt=""><span id="awayFallback">O</span></div>
+        <div class="logo-wrap">
+          <div class="logo-glow"></div>
+          <div class="logo-box"><img id="awayLogo" alt=""><span id="awayFallback">O</span></div>
+        </div>
       </div>
 
       <div class="set-history" id="setHistory">Waiting for live score…</div>
       <div class="feed-status" id="feedStatus"></div>
     </section>
   </main>
-  <script type="module" src="./overlay.js?v=15.18"></script>
+  <script type="module" src="./overlay.js?v=15.19"></script>
 </body>
 </html>
