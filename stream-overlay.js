@@ -95,6 +95,18 @@ function currentTimeoutNotice(game){
   }
 }
 
+async function clearTimeoutNotice(side=null){
+  const state=await loadState();
+  const {game}=activeContext(state,config?.match_id);
+  if(!game)return false;
+  const current=currentTimeoutNotice(game);
+  if(side&&current&&current.side!==side)return false;
+  localStorage.removeItem(timeoutNoticeKey(game));
+  lastHash='';
+  await publish(true);
+  return true;
+}
+
 async function triggerTimeout(side='home'){
   const state=await loadState();
   const {team,game}=activeContext(state,config?.match_id);
@@ -381,6 +393,6 @@ async function init(){
   }
 }
 
-window.CoachHubStreamOverlay={open:()=>openSettings(),publish:()=>publish(true),timeout:(side)=>triggerTimeout(side)};
+window.CoachHubStreamOverlay={open:()=>openSettings(),publish:()=>publish(true),timeout:(side)=>triggerTimeout(side),clearTimeout:(side)=>clearTimeoutNotice(side)};
 setTimeout(init,400);
 setInterval(()=>{if(enabled)publish(false);},1000);
