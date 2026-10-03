@@ -108,7 +108,7 @@ function renderAdminBar(game,lineup,rotation){
     <div class="game-admin-metric"><span>Timeouts Left</span><strong>${left}</strong><div class="game-admin-actions"><button type="button" class="btn compact" id="useTimeout" ${left<=0?'disabled':''}>Use TO</button><button type="button" class="btn compact ghost" id="undoTimeout" ${used<=0?'disabled':''}>+1</button></div></div>
     <div class="game-admin-metric ${subs>=MAX_SUBS?'limit-reached':''}"><span>Subs Used</span><strong>${subs} <small>/ ${MAX_SUBS}</small></strong><div class="game-admin-note">Libero replacements excluded</div></div>
     <div class="game-admin-metric"><span>Current Status</span><strong>${rotation.serving?'Serving':'Receiving'}</strong><div class="game-admin-note">Rotates clockwise on side-out</div><div class="game-admin-actions"><button type="button" class="btn compact ghost" id="rotationBack">↶ Back</button><button type="button" class="btn compact" id="rotationAhead">Ahead ↷</button></div></div>`;
-  const use=$('#useTimeout',bar);if(use)use.onclick=()=>{const n=timeoutsUsed(game);if(n<MAX_TIMEOUTS){setTimeoutsUsed(game,n+1);enhance();}};
+  const use=$('#useTimeout',bar);if(use)use.onclick=async()=>{const n=timeoutsUsed(game);if(n<MAX_TIMEOUTS){setTimeoutsUsed(game,n+1);try{await window.CoachHubStreamOverlay?.timeout?.('home');}catch(e){console.warn('Could not send timeout banner',e);}enhance();}};
   const undo=$('#undoTimeout',bar);if(undo)undo.onclick=()=>{const n=timeoutsUsed(game);if(n>0){setTimeoutsUsed(game,n-1);enhance();}};
   const back=$('#rotationBack',bar);if(back)back.onclick=()=>recordRotationAdjustment(game,'back');
   const ahead=$('#rotationAhead',bar);if(ahead)ahead.onclick=()=>recordRotationAdjustment(game,'ahead');
