@@ -590,6 +590,14 @@ async function endSet(){
   g.sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});g.currentSet++;g.homeScore=0;g.awayScore=0;selectedPlayerId=null;await persist();openLineupEditor(g,g.currentSet,{afterSave:()=>setView('gameday')});
 }
 
+async function endSetForStream(){
+  const g=activeGame();if(!g)return false;
+  if(g.homeScore===g.awayScore&&!confirm('The set is tied. End it anyway?'))return false;
+  g.sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});
+  g.currentSet++;g.homeScore=0;g.awayScore=0;selectedPlayerId=null;
+  await persist();render();return true;
+}
+
 async function endMatch(){
   const g=activeGame();if(!g)return;
   if((g.homeScore||g.awayScore)&&confirm(`Save current Set ${g.currentSet} as ${g.homeScore}-${g.awayScore}?`))g.sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});
@@ -676,6 +684,13 @@ function csvCell(v){const x=String(v??'');return /[",\n]/.test(x)?`"${x.replaceA
 function exportSeasonCsv(){
   const t=activeTeam();const header=['Player','Jersey','Position','Kills','Errors','Attempts','Hitting %','Aces','Serve Errors','Serve Attempts','Serve In %','Solo Blocks','Block Assists','Block Errors','Assists','Digs','Defensive Errors','Set Errors/BHE','Pass Receptions','Pass Avg'];const rows=teamPlayers().map(p=>{const s=playerSeasonStats(p);return [`${p.firstName} ${p.lastName}`,p.jersey,p.position,s.K,s.E,s.ATT,fmtPct(s.HIT),s.ACE,s.SE,s.SA,(s.SERVE*100).toFixed(1)+'%',s.BS,s.BA,s.BE,s.A,s.D,s.DE,s.BHE,s.PR,s.PASS.toFixed(2)]});const csv=[header,...rows].map(r=>r.map(csvCell).join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${(t?.name||'team').replace(/[^a-z0-9]+/gi,'-').toLowerCase()}-${t?.season||'season'}-stats.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
+
+window.CoachHubStreamActions={
+  recordScore:(type)=>recordStatForPlayer(type,null,{renderAfter:false}),
+  undo:()=>undoEvent(),
+  endSet:()=>endSetForStream(),
+  endMatch:()=>endMatch()
+};
 
 function exportBackup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`volleyball-coach-backup-${today()}.vball.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 
