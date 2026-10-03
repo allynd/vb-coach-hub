@@ -18,7 +18,7 @@ let mediaForTeamId=null;
 
 function esc(v=''){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function token(){return (crypto.randomUUID?.()||`${Date.now()}-${Math.random()}`).replaceAll('-','')+`${Math.random().toString(36).slice(2)}`;}
-function overlayUrl(t){return `${APP_URL}overlay.html?v=15.19&token=${encodeURIComponent(t||'')}`;}
+function overlayUrl(t){return `${APP_URL}overlay.html?v=15.20&token=${encodeURIComponent(t||'')}`;}
 
 async function getClient(){
   if(!clientPromise){
