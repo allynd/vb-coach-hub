@@ -689,7 +689,13 @@ window.CoachHubStreamActions={
   recordScore:(type)=>recordStatForPlayer(type,null,{renderAfter:false}),
   undo:()=>undoEvent(),
   endSet:()=>endSetForStream(),
-  endMatch:()=>endMatch()
+  endMatch:()=>endMatch(),
+  resumeGame:async(id)=>{
+    const game=state.games.find(g=>g.id===id&&!g.complete);
+    if(!game)return false;
+    state.activeGameId=game.id;selectedPlayerId=null;
+    await persist();render();return true;
+  }
 };
 
 function exportBackup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`volleyball-coach-backup-${today()}.vball.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
