@@ -92,6 +92,7 @@ async function restoreTimeout(side){
   const {game}=await context();if(!game)return;
   const used=timeoutUsed(game,side);
   if(used>0)setTimeoutUsed(game,side,used-1);
+  try{await window.CoachHubStreamOverlay?.clearTimeout?.(side);}catch(e){console.warn('Could not clear timeout banner',e);}
   flashMessage='Timeout count restored.';
   await renderStreamPage();
 }
