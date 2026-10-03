@@ -60,10 +60,8 @@ function injectNav(){
 }
 
 async function resumeGame(gameId){
-  const {state}=await context();
-  if(!state)return;
-  state.activeGameId=gameId;
-  await saveState(state);
+  const api=window.CoachHubStreamActions;
+  if(api?.resumeGame)await api.resumeGame(gameId);
   await renderStreamPage();
 }
 
