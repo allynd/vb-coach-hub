@@ -1,6 +1,7 @@
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './supabase-config.js';
 
 const $=s=>document.querySelector(s);
+const CURRENT_BUILD='15.17';
 const token=new URLSearchParams(location.search).get('token')||'';
 let clientPromise=null;
 let lastPayload='';
@@ -111,5 +112,23 @@ async function poll(){
   }
 }
 
+async function checkForOverlayUpdate(){
+  try{
+    const response=await fetch(`./overlay-version.json?ts=${Date.now()}`,{cache:'no-store'});
+    if(!response.ok)return;
+    const info=await response.json();
+    const latest=String(info?.build||'').trim();
+    if(!latest||latest===CURRENT_BUILD)return;
+    const next=new URL(location.href);
+    next.searchParams.set('v',latest);
+    if(token)next.searchParams.set('token',token);
+    location.replace(next.toString());
+  }catch(e){
+    console.warn('Overlay version check failed',e);
+  }
+}
+
 poll();
+checkForOverlayUpdate();
 setInterval(poll,1000);
+setInterval(checkForOverlayUpdate,30000);
