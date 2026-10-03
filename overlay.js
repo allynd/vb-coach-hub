@@ -8,6 +8,7 @@ let lastPayload='';
 let lastGood=0;
 let lastHomeScore=null;
 let lastAwayScore=null;
+let timeoutHideTimer=null;
 
 async function client(){
   if(!clientPromise){
@@ -44,6 +45,32 @@ function popScore(el){
   setTimeout(()=>el.classList.remove('score-pop'),280);
 }
 
+function hideTimeoutBanner(){
+  clearTimeout(timeoutHideTimer);
+  timeoutHideTimer=null;
+  const banner=$('#timeoutBanner');
+  if(banner)banner.hidden=true;
+  $('.score-widget')?.classList.remove('timeout-active');
+}
+
+function renderTimeoutBanner(data){
+  clearTimeout(timeoutHideTimer);
+  timeoutHideTimer=null;
+  const info=data?.timeout;
+  const expires=Date.parse(info?.expiresAt||'');
+  if(!info||!Number.isFinite(expires)||expires<=Date.now()){
+    hideTimeoutBanner();
+    return;
+  }
+  const banner=$('#timeoutBanner');
+  const team=$('#timeoutTeam');
+  if(!banner||!team)return;
+  team.textContent=info.teamName||'Timeout';
+  banner.hidden=false;
+  $('.score-widget')?.classList.add('timeout-active');
+  timeoutHideTimer=setTimeout(hideTimeoutBanner,Math.max(0,expires-Date.now())+50);
+}
+
 function render(data){
   $('#overlay').classList.remove('waiting');
   const widget=$('.score-widget');
@@ -76,6 +103,7 @@ function render(data){
 
   $('#homeServe').classList.toggle('active',!data.complete&&data.serving===true);
   $('#awayServe').classList.toggle('active',!data.complete&&data.serving===false);
+  renderTimeoutBanner(data);
 
   setLogo('.home-side .logo-box','#homeLogo','#homeFallback',data.teamLogoUrl,data.teamName);
   setLogo('.away-side .logo-box','#awayLogo','#awayFallback',data.opponentLogoUrl,data.opponentName);
