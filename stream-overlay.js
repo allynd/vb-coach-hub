@@ -74,6 +74,42 @@ function rallyState(state,game,lineup){
   return {serving};
 }
 
+function timeoutNoticeKey(game){return `coach-hub-stream-timeout:${game.id}`;}
+function currentTimeoutNotice(game){
+  try{
+    const raw=localStorage.getItem(timeoutNoticeKey(game));
+    if(!raw)return null;
+    const parsed=JSON.parse(raw);
+    const expires=Date.parse(parsed?.expiresAt||'');
+    if(!Number.isFinite(expires)||expires<=Date.now()){
+      localStorage.removeItem(timeoutNoticeKey(game));
+      return null;
+    }
+    return {
+      side:parsed.side==='away'?'away':'home',
+      teamName:String(parsed.teamName||'Timeout'),
+      expiresAt:new Date(expires).toISOString()
+    };
+  }catch{
+    return null;
+  }
+}
+
+async function triggerTimeout(side='home'){
+  const state=await loadState();
+  const {team,game}=activeContext(state,config?.match_id);
+  if(!team||!game)return null;
+  const notice={
+    side:side==='away'?'away':'home',
+    teamName:side==='away'?(game.opponent||'Opponent'):(team.name||'Team'),
+    expiresAt:new Date(Date.now()+60000).toISOString()
+  };
+  localStorage.setItem(timeoutNoticeKey(game),JSON.stringify(notice));
+  lastHash='';
+  await publish(true);
+  return notice;
+}
+
 function buildState(state,team,game){
   const completedSets=Array.isArray(game.sets)?game.sets:[];
   const homeSets=completedSets.filter(s=>Number(s.home)>Number(s.away)).length;
@@ -91,6 +127,7 @@ function buildState(state,team,game){
     setHistory:completedSets.map((s,i)=>({set:Number(s.set)||i+1,home:Number(s.home)||0,away:Number(s.away)||0})),
     serving:rotation.serving,
     complete:!!game.complete,
+    timeout:currentTimeoutNotice(game),
     teamLogoUrl:teamLogoUrl||'',
     opponentLogoUrl:opponentLogoUrl||''
   };
@@ -344,6 +381,6 @@ async function init(){
   }
 }
 
-window.CoachHubStreamOverlay={open:()=>openSettings(),publish:()=>publish(true)};
+window.CoachHubStreamOverlay={open:()=>openSettings(),publish:()=>publish(true),timeout:(side)=>triggerTimeout(side)};
 setTimeout(init,400);
 setInterval(()=>{if(enabled)publish(false);},1000);
