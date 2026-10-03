@@ -5,6 +5,8 @@ const token=new URLSearchParams(location.search).get('token')||'';
 let clientPromise=null;
 let lastPayload='';
 let lastGood=0;
+let lastHomeScore=null;
+let lastAwayScore=null;
 
 async function client(){
   if(!clientPromise){
@@ -34,12 +36,38 @@ function setLogo(boxSelector,imgSelector,fallbackSelector,url,name){
   }
 }
 
+function popScore(el){
+  el.classList.remove('score-pop');
+  void el.offsetWidth;
+  el.classList.add('score-pop');
+  setTimeout(()=>el.classList.remove('score-pop'),280);
+}
+
 function render(data){
   $('#overlay').classList.remove('waiting');
+  const widget=$('.score-widget');
+  const homeSide=$('.home-side');
+  const awaySide=$('.away-side');
+  const homeScoreEl=$('#homeScore');
+  const awayScoreEl=$('#awayScore');
+
+  widget.classList.toggle('complete',!!data.complete);
+  homeSide.classList.toggle('serving',!data.complete&&data.serving===true);
+  awaySide.classList.toggle('serving',!data.complete&&data.serving===false);
+
   $('#homeName').textContent=data.teamName||'TEAM';
   $('#awayName').textContent=data.opponentName||'OPPONENT';
-  $('#homeScore').textContent=data.complete?String(data.homeSets??0):String(data.homeScore??0);
-  $('#awayScore').textContent=data.complete?String(data.awaySets??0):String(data.awayScore??0);
+
+  const homeDisplay=data.complete?Number(data.homeSets??0):Number(data.homeScore??0);
+  const awayDisplay=data.complete?Number(data.awaySets??0):Number(data.awayScore??0);
+  homeScoreEl.textContent=String(homeDisplay);
+  awayScoreEl.textContent=String(awayDisplay);
+
+  if(lastHomeScore!==null&&homeDisplay!==lastHomeScore)popScore(homeScoreEl);
+  if(lastAwayScore!==null&&awayDisplay!==lastAwayScore)popScore(awayScoreEl);
+  lastHomeScore=homeDisplay;
+  lastAwayScore=awayDisplay;
+
   $('#homeSets').textContent=String(data.homeSets??0);
   $('#awaySets').textContent=String(data.awaySets??0);
   $('#setLabel').textContent=data.complete?'FINAL':`SET ${data.currentSet||1}`;
