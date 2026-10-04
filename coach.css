@@ -222,3 +222,30 @@ hr { border:0; border-top:1px solid var(--line); margin:16px 0; }
   .court-player { min-height:102px; }
   .saved-six { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
+
+
+/* 15.22 player archive */
+.archived-player-section{margin-top:20px}
+.archived-player-head{margin-bottom:10px}
+.archived-player-head h3{margin:0 0 3px}
+.archived-player-card{background:rgba(21,27,47,.72)}
+.archived-player-row{gap:10px}
+.archived-player-open{
+  min-width:0;flex:1;border:0;background:transparent;color:var(--text);padding:0;text-align:left;
+}
+.archived-player-open .player-main{width:100%}
+.archived-player-open .name{display:block;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.archived-player-open .sub{display:block;color:var(--muted);font-size:13px;margin-top:2px}
+.archived-empty{padding:14px;text-align:center}
+.archived-player-profile-card{opacity:.88}
+.archived-player-profile-card:hover,.archived-player-profile-card:focus-visible{opacity:1}
+.profile-status-line{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.profile-status-line h2{margin:0}
+.archived-badge{border-color:rgba(251,191,36,.38);color:#fde68a;background:rgba(251,191,36,.08)}
+.archived-profile-notice{border-left-color:var(--warn)}
+
+@media(max-width:560px){
+  .archived-player-row{align-items:center}
+  .archived-player-row>.btn{flex:0 0 auto}
+  .archived-player-open .avatar{width:42px;height:42px}
+}
