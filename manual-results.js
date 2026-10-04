@@ -54,6 +54,11 @@ async function openEditor(gameId=null){
       <div class="field"><label>Where / Venue</label><input id="manualLocation" value="${esc(game?.location||'')}" placeholder="School, gym, tournament, city…"></div>
       <div class="field"><label>Sets Won</label><input id="manualSetsWon" type="number" min="0" inputmode="numeric" value="${won}"></div>
       <div class="field"><label>Sets Lost</label><input id="manualSetsLost" type="number" min="0" inputmode="numeric" value="${lost}"></div>
+      <div class="field"><label>Match Type</label><select id="manualConferenceType">
+        <option value="conference" ${(game?.conferenceType||'conference')==='conference'?'selected':''}>Conference</option>
+        <option value="nonconference" ${game?.conferenceType==='nonconference'?'selected':''}>Non-Conference</option>
+        <option value="" ${game && !game?.conferenceType?'selected':''}>Unclassified</option>
+      </select></div>
     </div>
     <div class="card" style="margin:12px 0">
       <div class="muted">Match Result</div>
@@ -80,6 +85,7 @@ async function openEditor(gameId=null){
     const location=$('#manualLocation').value.trim();
     const setsWon=Math.max(0,Number($('#manualSetsWon').value)||0);
     const setsLost=Math.max(0,Number($('#manualSetsLost').value)||0);
+    const conferenceType=$('#manualConferenceType')?.value||'';
     const result=resultFromSets(setsWon,setsLost);
 
     if(!opponent){ alert('Enter the opponent.'); return; }
@@ -107,7 +113,7 @@ async function openEditor(gameId=null){
     }
 
     Object.assign(target,{
-      opponent,date,siteType,location,
+      opponent,date,siteType,location,conferenceType,
       manualRecord:true,
       manualSetsWon:setsWon,
       manualSetsLost:setsLost,
