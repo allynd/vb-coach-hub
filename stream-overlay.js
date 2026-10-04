@@ -127,7 +127,12 @@ function buildState(state,team,game){
   const homeSets=completedSets.filter(s=>Number(s.home)>Number(s.away)).length;
   const awaySets=completedSets.filter(s=>Number(s.away)>Number(s.home)).length;
   const lineup=game.setLineups?.[String(game.currentSet)]||null;
-  const rotation=game.complete?{serving:null}:rallyState(state,game,lineup);
+  const streamServe=game.streamServeBySet?.[String(game.currentSet)]||game.streamStartServeBySet?.[String(game.currentSet)]||'home';
+  const rotation=game.complete
+    ? {serving:null}
+    : game.streamOnly
+      ? {serving:streamServe==='home'}
+      : rallyState(state,game,lineup);
   return {
     teamName:team.name||'Team',
     opponentName:game.opponent||'Opponent',
