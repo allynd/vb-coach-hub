@@ -102,3 +102,47 @@
   .stream-score-actions{grid-template-columns:1fr}
   .stream-action-btn{min-height:58px}
 }
+
+
+/* 15.23 stream-only quick start */
+.stream-quick-start-card{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:16px;
+  background:linear-gradient(135deg,var(--panel),#17223b);
+}
+.stream-quick-start-card h2{margin:3px 0 6px}
+.stream-quick-start-card .btn{min-width:190px}
+
+.stream-serving-card{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:14px;
+}
+.stream-serving-card strong{
+  display:block;
+  margin-top:4px;
+  font-size:20px;
+}
+.stream-serving-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.stream-serving-actions .btn{
+  min-width:150px;
+}
+
+@media(max-width:720px){
+  .stream-quick-start-card,
+  .stream-serving-card{
+    grid-template-columns:1fr;
+  }
+  .stream-quick-start-card .btn,
+  .stream-serving-actions .btn{
+    width:100%;
+    min-width:0;
+  }
+}
