@@ -698,6 +698,32 @@ async function recordStreamScore(type){
   return e;
 }
 
+function recomputeStreamServing(g){
+  if(!g?.streamOnly)return;
+  const setKey=String(g.currentSet);
+  let side=g.streamStartServeBySet?.[setKey]||'home';
+  const events=state.events
+    .filter(e=>e.gameId===g.id&&Number(e.set)===Number(g.currentSet))
+    .slice()
+    .sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
+  for(const e of events){
+    const impact=Number(e.scoreImpact)||0;
+    if(impact>0)side='home';
+    else if(impact<0)side='away';
+  }
+  g.streamServeBySet=g.streamServeBySet||{};
+  g.streamServeBySet[setKey]=side;
+}
+
+async function undoStreamScore(){
+  await undoEvent();
+  const g=activeGame();
+  if(g?.streamOnly){
+    recomputeStreamServing(g);
+    await persist();
+  }
+}
+
 async function endSetForStream(){
   const g=activeGame();if(!g)return false;
   if(g.homeScore===g.awayScore&&!confirm('The set is tied. End it anyway?'))return false;
@@ -729,9 +755,12 @@ function lineupSummaryHtml(g){
 
 function showGameSummary(gameId){
   const g=state.games.find(x=>x.id===gameId);if(!g)return;
-  const players=gameRosterPlayers(g),ev=gameEvents(g.id);
+  const players=g.streamOnly
+    ? [...new Map([...gameRosterPlayers(g),...teamPlayers(g.teamId)].map(p=>[p.id,p])).values()]
+    : gameRosterPlayers(g);
+  const ev=gameEvents(g.id);
   $('#modalTitle').textContent=`${state.teams.find(t=>t.id===g.teamId)?.name||'Team'} vs ${g.opponent}`;
-  $('#modalBody').innerHTML=`<div class="stat-strip"><div class="metric"><span>Date</span><b style="font-size:16px">${esc(g.date)}</b></div><div class="metric"><span>Sets</span><b style="font-size:16px">${g.sets.map(s=>`${s.home}-${s.away}`).join(', ')||'—'}</b></div></div><hr><h3>Set Lineups</h3>${lineupSummaryHtml(g)}<hr><div class="table-wrap"><table><thead><tr><th>Player</th><th>K</th><th>E</th><th>ATT</th><th>HIT%</th><th>ACE</th><th>BS</th><th>BA</th><th>BE</th><th>AST</th><th>DIG</th><th>DE</th><th>BHE</th><th>PASS</th></tr></thead><tbody>${players.map(p=>{const s=summarizeEvents(ev,p.id);return `<tr><td>${playerLabel(p)}</td><td>${s.K}</td><td>${s.E}</td><td>${s.ATT}</td><td>${fmtPct(s.HIT)}</td><td>${s.ACE}</td><td>${s.BS}</td><td>${s.BA}</td><td>${s.BE}</td><td>${s.A}</td><td>${s.D}</td><td>${s.DE}</td><td>${s.BHE}</td><td>${s.PASS.toFixed(2)}</td></tr>`}).join('')}</tbody></table></div><hr><div class="button-row"><button type="button" class="btn primary" id="shareSummary">Share / Email</button><button type="button" class="btn" id="editMatch">Correct Match</button></div>`;
+  $('#modalBody').innerHTML=`${g.streamOnly?'<div class="notice"><strong>Stream-only match</strong><div class="muted">The score and result are saved. Player stats can be added now or later without changing the recorded score.</div></div>':''}<div class="stat-strip" style="margin-top:${g.streamOnly?'12px':'0'}"><div class="metric"><span>Date</span><b style="font-size:16px">${esc(g.date)}</b></div><div class="metric"><span>Sets</span><b style="font-size:16px">${g.sets.map(s=>`${s.home}-${s.away}`).join(', ')||'—'}</b></div></div>${g.streamOnly?'':'<hr><h3>Set Lineups</h3>'+lineupSummaryHtml(g)}<hr><div class="table-wrap"><table><thead><tr><th>Player</th><th>K</th><th>E</th><th>ATT</th><th>HIT%</th><th>ACE</th><th>BS</th><th>BA</th><th>BE</th><th>AST</th><th>DIG</th><th>DE</th><th>BHE</th><th>PASS</th></tr></thead><tbody>${players.map(p=>{const s=summarizeEvents(ev,p.id);return `<tr><td>${playerLabel(p)}</td><td>${s.K}</td><td>${s.E}</td><td>${s.ATT}</td><td>${fmtPct(s.HIT)}</td><td>${s.ACE}</td><td>${s.BS}</td><td>${s.BA}</td><td>${s.BE}</td><td>${s.A}</td><td>${s.D}</td><td>${s.DE}</td><td>${s.BHE}</td><td>${s.PASS.toFixed(2)}</td></tr>`}).join('')||'<tr><td colspan="14" class="muted">No player stats attached yet.</td></tr>'}</tbody></table></div><hr><div class="button-row"><button type="button" class="btn primary" id="shareSummary">Share / Email</button><button type="button" class="btn" id="editMatch">${g.streamOnly?'Add / Correct Stats':'Correct Match'}</button></div>`;
   $('#shareSummary').onclick=()=>shareMatch(g);$('#editMatch').onclick=()=>{$('#modal').close();openGameEditor(g);};$('#modal').showModal();
 }
 
@@ -815,7 +844,7 @@ window.CoachHubStreamActions={
   createMatch:(data)=>createStreamMatch(data),
   recordScore:(type)=>recordStreamScore(type),
   setServing:(side)=>setStreamServing(side),
-  undo:()=>undoEvent(),
+  undo:()=>undoStreamScore(),
   endSet:()=>endSetForStream(),
   endMatch:()=>endMatch(),
   resumeGame:async(id)=>{
