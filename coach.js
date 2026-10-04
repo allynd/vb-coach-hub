@@ -60,6 +60,13 @@ function activeTeam(){ return state.teams.find(t=>t.id===state.activeTeamId) || 
 function teamPlayers(teamId=state.activeTeamId){
   return state.players.filter(p=>p.teamId===teamId && !p.archived).sort((a,b)=>(+a.jersey||999)-(+b.jersey||999) || `${a.lastName||''}${a.firstName||''}`.localeCompare(`${b.lastName||''}${b.firstName||''}`));
 }
+function archivedPlayers(teamId=state.activeTeamId){
+  return state.players.filter(p=>p.teamId===teamId && !!p.archived).sort((a,b)=>{
+    const ay=String(a.gradYear||''),by=String(b.gradYear||'');
+    if(ay!==by)return by.localeCompare(ay);
+    return `${a.lastName||''}${a.firstName||''}`.localeCompare(`${b.lastName||''}${b.firstName||''}`);
+  });
+}
 function activeGame(){ return state.games.find(g=>g.id===state.activeGameId && !g.complete) || null; }
 function gameEvents(gameId){ return state.events.filter(e=>e.gameId===gameId); }
 function playerById(id){ return state.players.find(p=>p.id===id); }
@@ -217,27 +224,80 @@ function matchListItem(g){
 
 function renderRoster(){
   const players=teamPlayers();
-  $('#main').innerHTML=`<div class="section-head"><div><h2>Roster</h2><div class="muted">Primary position controls Libero/DS filtering on Game Day.</div></div><button class="btn primary" id="addPlayer">+ Player</button></div><div class="card"><div class="list">${players.map(p=>`<div class="list-item clickable" data-player="${p.id}"><div class="player-main">${avatar(p)}<div><div class="name">#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</div><div class="sub">${esc(p.position||'Player')}${p.secondaryPosition?` / ${esc(p.secondaryPosition)}`:''} ${p.gradYear?`• Class of ${esc(p.gradYear)}`:''}</div></div></div><span>›</span></div>`).join('')||'<div class="empty">No players yet.</div>'}</div></div>`;
+  const archived=archivedPlayers();
+  $('#main').innerHTML=`
+    <div class="section-head">
+      <div><h2>Roster</h2><div class="muted">Active players are available for new matches and lineup sheets. Archive players when they graduate or leave the team.</div></div>
+      <button class="btn primary" id="addPlayer">+ Player</button>
+    </div>
+    <div class="card">
+      <div class="list">
+        ${players.map(p=>`<div class="list-item clickable" data-player="${p.id}"><div class="player-main">${avatar(p)}<div><div class="name">#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</div><div class="sub">${esc(p.position||'Player')}${p.secondaryPosition?` / ${esc(p.secondaryPosition)}`:''} ${p.gradYear?`• Class of ${esc(p.gradYear)}`:''}</div></div></div><span>›</span></div>`).join('')||'<div class="empty">No active players. Add a player or restore someone from the archive.</div>'}
+      </div>
+    </div>
+    <section class="archived-player-section">
+      <div class="section-head archived-player-head">
+        <div><h3>Archived Players</h3><div class="muted">${archived.length} player${archived.length===1?'':'s'} • historical stats and match data are preserved</div></div>
+      </div>
+      <div class="card archived-player-card">
+        <div class="list">
+          ${archived.map(p=>`<div class="list-item archived-player-row"><button type="button" class="archived-player-open" data-player="${p.id}"><span class="player-main">${avatar(p)}<span><span class="name">#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</span><span class="sub">${esc(p.position||'Player')}${p.gradYear?` • ${esc(p.gradYear)}`:''} • Archived</span></span></span></button><button type="button" class="btn compact" data-restore-player="${p.id}">Restore</button></div>`).join('')||'<div class="muted archived-empty">No archived players.</div>'}
+        </div>
+      </div>
+    </section>`;
   $('#addPlayer').onclick=()=>openPlayerEditor();
   $$('[data-player]').forEach(el=>el.onclick=()=>showPlayerProfile(el.dataset.player));
+  $$('[data-restore-player]').forEach(btn=>btn.onclick=async e=>{e.stopPropagation();await restorePlayer(btn.dataset.restorePlayer);});
 }
 
 function renderPlayers(){
   const players=teamPlayers();
-  $('#main').innerHTML=`<div class="section-head"><div><h2>Players</h2><div class="muted">Profiles, season production, career history, and coach notes.</div></div></div><div class="grid two">${players.map(p=>{const s=playerSeasonStats(p);return `<button class="card player-card" data-player="${p.id}">${avatar(p,'large')}<div><div class="name">#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</div><div class="muted">${esc(p.position||'Player')}${p.gradYear?` • Class of ${esc(p.gradYear)}`:''}</div><div class="player-mini-stats"><span><b>${s.K}</b>K</span><span><b>${s.ACE}</b>ACE</span><span><b>${s.A}</b>AST</span><span><b>${s.D}</b>DIG</span></div></div></button>`}).join('')||'<div class="card empty">No players yet. Add them from Roster.</div>'}</div>`;
+  const archived=archivedPlayers();
+  const playerCard=p=>{const s=playerSeasonStats(p);return `<button class="card player-card ${p.archived?'archived-player-profile-card':''}" data-player="${p.id}">${avatar(p,'large')}<div><div class="name">#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</div><div class="muted">${esc(p.position||'Player')}${p.gradYear?` • Class of ${esc(p.gradYear)}`:''}${p.archived?' • Archived':''}</div><div class="player-mini-stats"><span><b>${s.K}</b>K</span><span><b>${s.ACE}</b>ACE</span><span><b>${s.A}</b>AST</span><span><b>${s.D}</b>DIG</span></div></div></button>`;};
+  $('#main').innerHTML=`
+    <div class="section-head"><div><h2>Players</h2><div class="muted">Profiles, production, career history, and coach notes.</div></div></div>
+    <div class="grid two">${players.map(playerCard).join('')||'<div class="card empty">No active players yet. Add them from Roster.</div>'}</div>
+    ${archived.length?`<div class="section-head archived-player-head" style="margin-top:22px"><div><h3>Archived Players</h3><div class="muted">Graduated or inactive players remain available for historical review.</div></div></div><div class="grid two">${archived.map(playerCard).join('')}</div>`:''}`;
   $$('[data-player]').forEach(el=>el.onclick=()=>showPlayerProfile(el.dataset.player));
 }
 
 function showPlayerProfile(id){
-  const p=playerById(id), s=playerSeasonStats(p), career=playerCareerStats(p), t=activeTeam();
+  const p=playerById(id);if(!p)return;
+  const s=playerSeasonStats(p), career=playerCareerStats(p), t=state.teams.find(x=>x.id===p.teamId)||activeTeam();
   const games=state.games.filter(g=>g.teamId===p.teamId);
   const rows=games.map(g=>({g,s:summarizeEvents(gameEvents(g.id),p.id)})).filter(x=>Object.values(x.s).some(v=>typeof v==='number'&&v!==0));
   $('#modalTitle').textContent='Player Profile';
-  $('#modalBody').innerHTML=`<div class="profile-head">${avatar(p)}<div><h2>#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</h2><div class="muted">${esc(p.position||'Player')}${p.secondaryPosition?` / ${esc(p.secondaryPosition)}`:''} • ${esc(t?.school||t?.name||'')}</div></div></div><div class="stat-strip" style="margin-top:16px"><div class="metric"><span>Kills</span><b>${s.K}</b></div><div class="metric"><span>Hit %</span><b>${fmtPct(s.HIT)}</b></div><div class="metric"><span>Aces</span><b>${s.ACE}</b></div><div class="metric"><span>Digs</span><b>${s.D}</b></div></div><hr><div class="grid two"><div><div class="muted">Height</div><strong>${esc(p.height||'—')}</strong></div><div><div class="muted">Class</div><strong>${esc(p.gradYear||'—')}</strong></div><div><div class="muted">Dominant hand</div><strong>${esc(p.hand||'—')}</strong></div><div><div class="muted">Block errors</div><strong>${s.BE}</strong></div><div><div class="muted">Defensive errors</div><strong>${s.DE}</strong></div><div><div class="muted">Pass avg</div><strong>${s.PASS.toFixed(2)}</strong></div></div><hr><h3>Career</h3><div class="stat-strip"><div class="metric"><span>Kills</span><b>${career.K}</b></div><div class="metric"><span>Aces</span><b>${career.ACE}</b></div><div class="metric"><span>Assists</span><b>${career.A}</b></div><div class="metric"><span>Digs</span><b>${career.D}</b></div></div>${p.notes?`<hr><div class="muted">Coach notes</div><p>${esc(p.notes)}</p>`:''}<hr><div class="button-row"><button type="button" class="btn" id="editPlayer">Edit Profile</button><button type="button" class="btn" id="adjustPlayerStats">Adjust Stats</button><button type="button" class="btn primary" id="sharePlayer">Share Player Summary</button></div><hr><h3>Game Log</h3><div class="list">${rows.map(({g,s})=>`<div class="list-item"><div><strong>${esc(g.opponent)}</strong><div class="muted">${esc(g.date)}</div></div><div>K ${s.K} • A ${s.A} • D ${s.D} • BE ${s.BE} • DE ${s.DE}</div></div>`).join('')||'<div class="muted">No game stats yet.</div>'}</div>`;
+  $('#modalBody').innerHTML=`<div class="profile-head">${avatar(p)}<div><div class="profile-status-line"><h2>#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</h2>${p.archived?'<span class="badge visible-badge archived-badge">Archived</span>':''}</div><div class="muted">${esc(p.position||'Player')}${p.secondaryPosition?` / ${esc(p.secondaryPosition)}`:''} • ${esc(t?.school||t?.name||'')}</div></div></div>${p.archived?'<div class="notice archived-profile-notice" style="margin-top:14px"><strong>Historical player</strong><div class="muted">This player is not available for new match rosters or lineup sheets. Their profile, stats, and prior match history are preserved.</div></div>':''}<div class="stat-strip" style="margin-top:16px"><div class="metric"><span>Kills</span><b>${s.K}</b></div><div class="metric"><span>Hit %</span><b>${fmtPct(s.HIT)}</b></div><div class="metric"><span>Aces</span><b>${s.ACE}</b></div><div class="metric"><span>Digs</span><b>${s.D}</b></div></div><hr><div class="grid two"><div><div class="muted">Height</div><strong>${esc(p.height||'—')}</strong></div><div><div class="muted">Class</div><strong>${esc(p.gradYear||'—')}</strong></div><div><div class="muted">Dominant hand</div><strong>${esc(p.hand||'—')}</strong></div><div><div class="muted">Block errors</div><strong>${s.BE}</strong></div><div><div class="muted">Defensive errors</div><strong>${s.DE}</strong></div><div><div class="muted">Pass avg</div><strong>${s.PASS.toFixed(2)}</strong></div></div><hr><h3>Career</h3><div class="stat-strip"><div class="metric"><span>Kills</span><b>${career.K}</b></div><div class="metric"><span>Aces</span><b>${career.ACE}</b></div><div class="metric"><span>Assists</span><b>${career.A}</b></div><div class="metric"><span>Digs</span><b>${career.D}</b></div></div>${p.notes?`<hr><div class="muted">Coach notes</div><p>${esc(p.notes)}</p>`:''}<hr><div class="button-row"><button type="button" class="btn" id="editPlayer">Edit Profile</button><button type="button" class="btn" id="adjustPlayerStats">Adjust Stats</button><button type="button" class="btn primary" id="sharePlayer">Share Player Summary</button>${p.archived?'<button type="button" class="btn success" id="restorePlayer">Restore to Roster</button>':'<button type="button" class="btn danger" id="archiveProfilePlayer">Archive Player</button>'}</div><hr><h3>Game Log</h3><div class="list">${rows.map(({g,s})=>`<div class="list-item"><div><strong>${esc(g.opponent)}</strong><div class="muted">${esc(g.date)}</div></div><div>K ${s.K} • A ${s.A} • D ${s.D} • BE ${s.BE} • DE ${s.DE}</div></div>`).join('')||'<div class="muted">No game stats yet.</div>'}</div>`;
   $('#editPlayer').onclick=()=>{ $('#modal').close(); openPlayerEditor(p); };
   $('#adjustPlayerStats').onclick=()=>openPlayerStatAdjuster(p.id);
   $('#sharePlayer').onclick=()=>sharePlayerSummary(p);
+  $('#archiveProfilePlayer')?.addEventListener('click',()=>archivePlayer(p.id));
+  $('#restorePlayer')?.addEventListener('click',()=>restorePlayer(p.id));
   if(!$('#modal').open)$('#modal').showModal();
+}
+
+async function archivePlayer(playerId){
+  const p=playerById(playerId);if(!p||p.archived)return;
+  const liveGame=state.games.find(g=>g.teamId===p.teamId&&!g.complete&&gameRosterIds(g).includes(p.id));
+  if(liveGame){
+    alert(`#${p.jersey||'—'} ${p.firstName} ${p.lastName} is on the roster for the unfinished match vs ${liveGame.opponent||'Opponent'}. Finish that match before archiving this player.`);
+    return;
+  }
+  if(!confirm(`Archive #${p.jersey||'—'} ${p.firstName} ${p.lastName}? They will be removed from the active roster, but all historical stats and match data will be kept.`))return;
+  p.archived=true;
+  p.archivedAt=new Date().toISOString();
+  await persist();
+  if($('#modal')?.open)$('#modal').close();
+  render();
+}
+
+async function restorePlayer(playerId){
+  const p=playerById(playerId);if(!p||!p.archived)return;
+  p.archived=false;
+  delete p.archivedAt;
+  await persist();
+  if($('#modal')?.open)$('#modal').close();
+  render();
 }
 
 function playerAdjustmentRows(p){
@@ -345,7 +405,7 @@ function openTeamEditor(team=null){
 function openPlayerEditor(player=null){
   const t=activeTeam(); if(!t)return openTeamEditor();
   $('#modalTitle').textContent=player?'Edit Player':'Add Player';
-  $('#modalBody').innerHTML=`<div class="field"><label>Player photo</label><input id="pPhoto" type="file" accept="image/*" capture="environment"></div><div class="form-grid"><div class="field"><label>First name</label><input id="pFirst" value="${esc(player?.firstName||'')}"></div><div class="field"><label>Last name</label><input id="pLast" value="${esc(player?.lastName||'')}"></div><div class="field"><label>Jersey #</label><input id="pJersey" inputmode="numeric" value="${esc(player?.jersey||'')}"></div><div class="field"><label>Primary position</label><select id="pPos">${['','OH','OPP','MB','S','DS','L'].map(x=>`<option ${player?.position===x?'selected':''}>${x}</option>`).join('')}</select><div class="muted helper">Use L or DS here for players who should appear in the Libero Sub list.</div></div><div class="field"><label>Secondary position</label><select id="pPos2">${['','OH','OPP','MB','S','DS','L'].map(x=>`<option ${player?.secondaryPosition===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>Height</label><input id="pHeight" value="${esc(player?.height||'')}" placeholder="5'8\""></div><div class="field"><label>Graduation year</label><input id="pGrad" inputmode="numeric" value="${esc(player?.gradYear||'')}"></div><div class="field"><label>Dominant hand</label><select id="pHand"><option></option><option ${player?.hand==='Right'?'selected':''}>Right</option><option ${player?.hand==='Left'?'selected':''}>Left</option></select></div></div><div class="field"><label>Coach notes</label><textarea id="pNotes">${esc(player?.notes||'')}</textarea></div><div class="button-row"><button type="button" class="btn primary" id="savePlayer">Save Player</button>${player?'<button type="button" class="btn danger" id="archivePlayer">Archive</button>':''}</div>`;
+  $('#modalBody').innerHTML=`<div class="field"><label>Player photo</label><input id="pPhoto" type="file" accept="image/*" capture="environment"></div><div class="form-grid"><div class="field"><label>First name</label><input id="pFirst" value="${esc(player?.firstName||'')}"></div><div class="field"><label>Last name</label><input id="pLast" value="${esc(player?.lastName||'')}"></div><div class="field"><label>Jersey #</label><input id="pJersey" inputmode="numeric" value="${esc(player?.jersey||'')}"></div><div class="field"><label>Primary position</label><select id="pPos">${['','OH','OPP','MB','S','DS','L'].map(x=>`<option ${player?.position===x?'selected':''}>${x}</option>`).join('')}</select><div class="muted helper">Use L or DS here for players who should appear in the Libero Sub list.</div></div><div class="field"><label>Secondary position</label><select id="pPos2">${['','OH','OPP','MB','S','DS','L'].map(x=>`<option ${player?.secondaryPosition===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>Height</label><input id="pHeight" value="${esc(player?.height||'')}" placeholder="5'8\""></div><div class="field"><label>Graduation year</label><input id="pGrad" inputmode="numeric" value="${esc(player?.gradYear||'')}"></div><div class="field"><label>Dominant hand</label><select id="pHand"><option></option><option ${player?.hand==='Right'?'selected':''}>Right</option><option ${player?.hand==='Left'?'selected':''}>Left</option></select></div></div><div class="field"><label>Coach notes</label><textarea id="pNotes">${esc(player?.notes||'')}</textarea></div><div class="button-row"><button type="button" class="btn primary" id="savePlayer">Save Player</button>${player&&!player.archived?'<button type="button" class="btn danger" id="archivePlayer">Archive Player</button>':''}${player?.archived?'<button type="button" class="btn success" id="restoreEditorPlayer">Restore to Roster</button>':''}</div>`;
   $('#savePlayer').onclick=async()=>{
     const firstName=$('#pFirst').value.trim(),lastName=$('#pLast').value.trim(); if(!firstName&&!lastName)return alert('Enter a player name.');
     let photo=player?.photo||''; const file=$('#pPhoto').files[0]; if(file)photo=await fileToDataUrl(file,640,.82);
@@ -353,7 +413,8 @@ function openPlayerEditor(player=null){
     if(player)Object.assign(player,data);else{const id=uid('player');state.players.push({id,personId:uid('person'),teamId:t.id,archived:false,...data});}
     await persist();$('#modal').close();render();
   };
-  $('#archivePlayer')?.addEventListener('click',async()=>{if(confirm('Archive this player? Historical stats will be kept.')){player.archived=true;await persist();$('#modal').close();render();}});
+  $('#archivePlayer')?.addEventListener('click',()=>archivePlayer(player.id));
+  $('#restoreEditorPlayer')?.addEventListener('click',()=>restorePlayer(player.id));
   $('#modal').showModal();
 }
 
