@@ -651,11 +651,67 @@ async function endSet(){
   g.sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});g.currentSet++;g.homeScore=0;g.awayScore=0;selectedPlayerId=null;await persist();openLineupEditor(g,g.currentSet,{afterSave:()=>setView('gameday')});
 }
 
+async function createStreamMatch(data={}){
+  const t=activeTeam();if(!t)return null;
+  if(activeGame())return null;
+  const rosterSnapshot=teamPlayers(t.id).map(p=>({
+    playerId:p.id,jersey:p.jersey||'',firstName:p.firstName||'',lastName:p.lastName||'',position:p.position||''
+  }));
+  const firstServe=data.startingServe==='away'?'away':'home';
+  const g={
+    id:uid('game'),teamId:t.id,opponent:String(data.opponent||'').trim()||'Opponent',
+    date:data.date||today(),location:String(data.location||'').trim(),siteType:data.siteType||'home',
+    conferenceType:data.conferenceType||'',currentSet:1,homeScore:0,awayScore:0,sets:[],
+    rosterSnapshot,setLineups:{},complete:false,streamOnly:true,
+    streamStartServeBySet:{'1':firstServe},streamServeBySet:{'1':firstServe},
+    createdAt:new Date().toISOString()
+  };
+  state.games.push(g);
+  state.activeGameId=g.id;
+  selectedPlayerId=null;
+  await persist();
+  render();
+  return g.id;
+}
+
+async function setStreamServing(side='home'){
+  const g=activeGame();if(!g||!g.streamOnly)return false;
+  const next=side==='away'?'away':'home';
+  g.streamServeBySet=g.streamServeBySet||{};
+  g.streamServeBySet[String(g.currentSet)]=next;
+  if(!g.streamStartServeBySet?.[String(g.currentSet)]){
+    g.streamStartServeBySet=g.streamStartServeBySet||{};
+    g.streamStartServeBySet[String(g.currentSet)]=next;
+  }
+  await persist();
+  return true;
+}
+
+async function recordStreamScore(type){
+  const e=await recordStatForPlayer(type,null,{renderAfter:false});
+  const g=activeGame();
+  if(e&&g?.streamOnly){
+    g.streamServeBySet=g.streamServeBySet||{};
+    g.streamServeBySet[String(g.currentSet)]=type==='opp_point'?'away':'home';
+    await persist();
+  }
+  return e;
+}
+
 async function endSetForStream(){
   const g=activeGame();if(!g)return false;
   if(g.homeScore===g.awayScore&&!confirm('The set is tied. End it anyway?'))return false;
-  g.sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});
-  g.currentSet++;g.homeScore=0;g.awayScore=0;selectedPlayerId=null;
+  const finishedSet=Number(g.currentSet)||1;
+  g.sets.push({set:finishedSet,home:g.homeScore,away:g.awayScore});
+  g.currentSet=finishedSet+1;g.homeScore=0;g.awayScore=0;selectedPlayerId=null;
+  if(g.streamOnly){
+    g.streamStartServeBySet=g.streamStartServeBySet||{};
+    g.streamServeBySet=g.streamServeBySet||{};
+    const priorStart=g.streamStartServeBySet[String(finishedSet)]||'home';
+    const nextStart=priorStart==='home'?'away':'home';
+    g.streamStartServeBySet[String(g.currentSet)]=nextStart;
+    g.streamServeBySet[String(g.currentSet)]=nextStart;
+  }
   await persist();render();return true;
 }
 
@@ -681,7 +737,9 @@ function showGameSummary(gameId){
 
 function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
   const ev=gameEvents(g.id).slice().sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
-  const players=gameRosterPlayers(g);
+  const players=g.streamOnly
+    ? [...new Map([...gameRosterPlayers(g),...teamPlayers(g.teamId)].map(p=>[p.id,p])).values()]
+    : gameRosterPlayers(g);
   const setNumbers=new Set();
   (g.sets||[]).forEach((s,i)=>setNumbers.add(Number(s.set)||i+1));
   ev.forEach(e=>{const n=Number(e.set);if(Number.isFinite(n)&&n>0)setNumbers.add(n);});
@@ -709,6 +767,13 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
     const setNo=Number($('#correctionSet')?.value)||selectedCorrectionSet;
     if(!playerId||!statDefs[type])return;
     if(delta>0){
+      if(g.streamOnly&&!gameRosterIds(g).includes(playerId)){
+        const p=playerById(playerId);
+        if(p){
+          g.rosterSnapshot=Array.isArray(g.rosterSnapshot)?g.rosterSnapshot:[];
+          g.rosterSnapshot.push({playerId:p.id,jersey:p.jersey||'',firstName:p.firstName||'',lastName:p.lastName||'',position:p.position||''});
+        }
+      }
       state.events.push({id:uid('event'),kind:'stat',gameId:g.id,teamId:g.teamId,playerId,type,set:setNo,scoreImpact:0,correction:true,createdAt:new Date().toISOString()});
     }else{
       const idx=[...state.events].map((e,i)=>({e,i})).reverse().find(x=>x.e.gameId===g.id&&x.e.playerId===playerId&&Number(x.e.set)===setNo&&x.e.type===type)?.i;
@@ -747,7 +812,9 @@ function exportSeasonCsv(){
 }
 
 window.CoachHubStreamActions={
-  recordScore:(type)=>recordStatForPlayer(type,null,{renderAfter:false}),
+  createMatch:(data)=>createStreamMatch(data),
+  recordScore:(type)=>recordStreamScore(type),
+  setServing:(side)=>setStreamServing(side),
   undo:()=>undoEvent(),
   endSet:()=>endSetForStream(),
   endMatch:()=>endMatch(),
