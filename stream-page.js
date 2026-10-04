@@ -3,6 +3,7 @@ import { loadState, saveState } from './db.js';
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const MAX_TIMEOUTS=2;
+const today=()=>new Date().toISOString().slice(0,10);
 let streamActive=false;
 let flashMessage='';
 
@@ -64,6 +65,54 @@ async function resumeGame(gameId){
   if(api?.resumeGame)await api.resumeGame(gameId);
   await renderStreamPage();
 }
+async function openStreamMatchSetup(){
+  const {team}=await context();
+  if(!team)return alert('Choose or create a team first.');
+  const modal=$('#modal'),title=$('#modalTitle'),body=$('#modalBody');
+  if(!modal||!title||!body)return;
+  title.textContent='New Stream Match';
+  body.innerHTML=`
+    <div class="notice"><strong>Quick broadcast setup</strong><div class="muted">No roster, lineup, rotation, or player stats are required. You can attach player stats later.</div></div>
+    <div class="form-grid" style="margin-top:12px">
+      <div class="field"><label>Opponent</label><input id="streamNewOpponent" placeholder="Opponent name"></div>
+      <div class="field"><label>Date</label><input id="streamNewDate" type="date" value="${today()}"></div>
+      <div class="field"><label>Match Type</label><select id="streamNewConference"><option value="conference">Conference</option><option value="nonconference">Non-Conference</option><option value="">Unclassified</option></select></div>
+      <div class="field"><label>Site</label><select id="streamNewSite"><option value="home">Home</option><option value="away">Away</option><option value="neutral">Neutral</option></select></div>
+      <div class="field"><label>Where / Venue</label><input id="streamNewLocation" placeholder="School, gym, tournament, city…"></div>
+      <div class="field"><label>First Serve</label><select id="streamNewServe"><option value="home">${esc(team.name||'Team')}</option><option value="away">Opponent</option></select></div>
+    </div>
+    <div class="button-row"><button type="button" class="btn primary" id="startStreamOnlyMatch">Start Stream Match</button></div>`;
+  $('#startStreamOnlyMatch',body).onclick=async()=>{
+    const opponent=$('#streamNewOpponent',body).value.trim();
+    if(!opponent)return alert('Enter the opponent.');
+    const api=window.CoachHubStreamActions;
+    if(!api?.createMatch)return alert('Stream match controls are still loading. Try again in a moment.');
+    const id=await api.createMatch({
+      opponent,
+      date:$('#streamNewDate',body).value||today(),
+      conferenceType:$('#streamNewConference',body).value||'',
+      siteType:$('#streamNewSite',body).value||'home',
+      location:$('#streamNewLocation',body).value.trim(),
+      startingServe:$('#streamNewServe',body).value==='away'?'away':'home'
+    });
+    if(!id)return alert('Could not start the Stream Match. Finish or close the current active match first.');
+    modal.close();
+    flashMessage='Stream-only match started. No lineup or rotation required.';
+    await window.CoachHubStreamOverlay?.publish?.();
+    await renderStreamPage();
+  };
+  modal.showModal();
+}
+
+async function setServing(side){
+  const api=window.CoachHubStreamActions;
+  if(!api?.setServing)return;
+  await api.setServing(side);
+  await window.CoachHubStreamOverlay?.publish?.();
+  flashMessage=`${side==='away'?'Opponent':'Team'} marked as serving.`;
+  await renderStreamPage();
+}
+
 
 async function recordScore(type){
   const api=window.CoachHubStreamActions;
@@ -150,15 +199,23 @@ async function renderStreamPage(){
     main.innerHTML=`
       <div class="stream-control-shell">
         <div class="stream-control-head"><div><div class="eyebrow">BROADCAST CONTROL</div><h2>Stream Control</h2></div></div>
-        <div class="card empty">
-          <h2>No match in progress</h2>
-          <p>Start a new match from Game Day or resume an unfinished match.</p>
-          <div class="button-row" style="justify-content:center">
-            <button class="btn primary" id="streamGoGameDay">Go to Game Day</button>
-            ${unfinished.map(g=>`<button class="btn" data-stream-resume="${g.id}">Resume ${esc(g.opponent||'Opponent')}</button>`).join('')}
+        <div class="card stream-quick-start-card">
+          <div>
+            <div class="eyebrow">FAST START</div>
+            <h2>Stream without lineup setup</h2>
+            <p class="muted">Create the match info and go straight to score + timeout controls. No roster, rotation, or stats required.</p>
+          </div>
+          <button class="btn primary" id="streamNewQuickMatch">New Stream Match</button>
+        </div>
+        <div class="card">
+          <div class="section-head"><div><h3>Other options</h3><div class="muted">Use Game Day when you want full live stats, or resume an unfinished match below.</div></div></div>
+          <div class="button-row">
+            <button class="btn" id="streamGoGameDay">Go to Game Day</button>
+            ${unfinished.map(g=>`<button class="btn" data-stream-resume="${g.id}">Resume ${esc(g.opponent||'Opponent')}${g.streamOnly?' • Stream':''}</button>`).join('')}
           </div>
         </div>
       </div>`;
+    $('#streamNewQuickMatch')?.addEventListener('click',openStreamMatchSetup);
     $('#streamGoGameDay')?.addEventListener('click',goGameDay);
     $$('[data-stream-resume]').forEach(btn=>btn.addEventListener('click',()=>resumeGame(btn.dataset.streamResume)));
     return;
@@ -169,6 +226,7 @@ async function renderStreamPage(){
   const history=(game.sets||[]).map((s,i)=>`S${Number(s.set)||i+1} ${Number(s.home)||0}–${Number(s.away)||0}`).join('   •   ');
   const homeTO=timeoutUsed(game,'home');
   const awayTO=timeoutUsed(game,'away');
+  const streamServing=game.streamOnly?(game.streamServeBySet?.[String(game.currentSet)]||game.streamStartServeBySet?.[String(game.currentSet)]||'home'):null;
 
   main.innerHTML=`
     <div class="stream-control-shell">
@@ -176,10 +234,10 @@ async function renderStreamPage(){
         <div>
           <div class="eyebrow">BROADCAST CONTROL</div>
           <h2>Stream Control</h2>
-          <div class="muted">Score, timeouts, and broadcast controls without the lineup/stat-entry extras.</div>
+          <div class="muted">${game.streamOnly?'Stream-only match • score now, attach stats later.':'Score, timeouts, and broadcast controls without the lineup/stat-entry extras.'}</div>
         </div>
         <div class="button-row">
-          <button class="btn" id="streamBackGameDay">🏐 Game Day</button>
+          <button class="btn" id="streamBackGameDay">🏐 ${game.streamOnly?'Set Up Stats':'Game Day'}</button>
           <button class="btn primary" id="streamWidgetSettings">📺 Widget Settings</button>
         </div>
       </div>
@@ -206,6 +264,18 @@ async function renderStreamPage(){
         <button type="button" class="stream-action-btn opp-error" data-stream-score="opp_serve_error">Opp Serve Error<small>+1 ${esc(team.name||'Team')}</small></button>
         <button type="button" class="stream-action-btn theirs" data-stream-score="opp_point">+1 ${esc(game.opponent||'Opponent')}<small>Opponent point</small></button>
       </section>
+
+      ${game.streamOnly?`
+      <section class="card stream-serving-card">
+        <div>
+          <div class="muted">Serving now</div>
+          <strong>${streamServing==='away'?esc(game.opponent||'Opponent'):esc(team.name||'Team')}</strong>
+        </div>
+        <div class="stream-serving-actions">
+          <button type="button" class="btn ${streamServing==='home'?'primary':''}" data-stream-serving="home">${esc(team.name||'Team')} Serving</button>
+          <button type="button" class="btn ${streamServing==='away'?'primary':''}" data-stream-serving="away">${esc(game.opponent||'Opponent')} Serving</button>
+        </div>
+      </section>`:''}
 
       <section class="stream-timeout-grid">
         <div class="card stream-timeout-card">
@@ -236,7 +306,7 @@ async function renderStreamPage(){
       <section class="card stream-widget-card">
         <div>
           <h3>Stream Widget</h3>
-          <div class="muted">Opponent logo, preview, Streamlabs URL, regenerate link, and overlay enable/disable controls.</div>
+          <div class="muted">Opponent logo, preview, Streamlabs URL, regenerate link, and overlay enable/disable controls.${game.streamOnly?' Player stats can be entered later from the completed match.':''}</div>
         </div>
         <button type="button" class="btn primary" id="streamWidgetSettings2">Open Stream Controls</button>
       </section>
@@ -248,13 +318,14 @@ async function renderStreamPage(){
           <button type="button" class="btn" id="streamPublish">↻ Push Widget</button>
           <button type="button" class="btn" id="streamEndSet">End Set</button>
           <button type="button" class="btn danger" id="streamEndMatch">End Match</button>
-          <button type="button" class="btn ghost" id="streamBackGameDay2">Game Day</button>
+          <button type="button" class="btn ghost" id="streamBackGameDay2">${game.streamOnly?'Set Up Stats':'Game Day'}</button>
         </div>
       </section>
     </div>`;
 
   flashMessage='';
   $$('[data-stream-score]').forEach(btn=>btn.addEventListener('click',()=>recordScore(btn.dataset.streamScore)));
+  $$('[data-stream-serving]').forEach(btn=>btn.addEventListener('click',()=>setServing(btn.dataset.streamServing)));
   $('#streamHomeTimeout')?.addEventListener('click',()=>useTimeout('home'));
   $('#streamAwayTimeout')?.addEventListener('click',()=>useTimeout('away'));
   $('#streamHomeTimeoutUndo')?.addEventListener('click',()=>restoreTimeout('home'));
