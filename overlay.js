@@ -1,7 +1,7 @@
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './supabase-config.js';
 
 const $=s=>document.querySelector(s);
-const CURRENT_BUILD='15.23';
+const CURRENT_BUILD='15.24';
 const token=new URLSearchParams(location.search).get('token')||'';
 let clientPromise=null;
 let lastPayload='';

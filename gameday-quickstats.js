@@ -9,13 +9,13 @@ const QUICK_GROUPS=[
     ['serve_ace','Ace','positive'],['serve_in','In','neutral'],['serve_error','Error','negative']
   ]],
   ['Attack',[
-    ['attack_kill','Kill','positive'],['attack_attempt','Attack','neutral'],['attack_error','Error','negative']
+    ['attack_kill','Kill','positive'],['attack_attempt','Attempts','neutral'],['attack_error','Error','negative']
   ]],
   ['Block',[
     ['block_solo','Solo','positive'],['block_assist','Assist','positive'],['block_error','Error','negative']
   ]],
   ['Serve Receive',[
-    ['pass_3','3','positive'],['pass_2','2','neutral'],['pass_1','1','neutral'],['pass_0','0 / Error','negative']
+    ['pass_3','3','positive'],['pass_2','2','neutral'],['pass_1','1','neutral'],['pass_0','Receive Error','negative'],['pass_overpass','Overpass','neutral']
   ]],
   ['Set',[
     ['set_assist','Assist','positive'],['set_error','Error / BHE','negative']
@@ -24,7 +24,7 @@ const QUICK_GROUPS=[
     ['dig','Dig','positive'],['defense_error','Error','negative']
   ]]
 ];
-const SIMPLE_TYPES=new Set(['serve_ace','serve_in','serve_error','attack_kill','attack_attempt','attack_error','block_solo','block_error','set_assist','dig','defense_error']);
+const SIMPLE_TYPES=new Set(['serve_ace','serve_in','serve_error','attack_kill','attack_attempt','attack_error','block_solo','block_error','set_assist','dig','defense_error','pass_0','pass_overpass']);
 
 function esc(v=''){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function label(p){return p?`#${esc(p.jersey||'—')} ${esc(p.firstName||'')} ${esc(p.lastName||'')}`:'—';}
