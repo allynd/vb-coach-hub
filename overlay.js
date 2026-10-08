@@ -1,7 +1,7 @@
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './supabase-config.js';
 
 const $=s=>document.querySelector(s);
-const CURRENT_BUILD='15.27';
+const CURRENT_BUILD='15.28';
 const token=new URLSearchParams(location.search).get('token')||'';
 let clientPromise=null;
 let lastPayload='';
@@ -99,7 +99,6 @@ function render(data){
   $('#homeSets').textContent=String(data.homeSets??0);
   $('#awaySets').textContent=String(data.awaySets??0);
   $('#setLabel').textContent=data.complete?'FINAL':`SET ${data.currentSet||1}`;
-  $('#liveLabel').textContent=data.complete?'MATCH':'LIVE';
 
   $('#homeServe').classList.toggle('active',!data.complete&&data.serving===true);
   $('#awayServe').classList.toggle('active',!data.complete&&data.serving===false);
