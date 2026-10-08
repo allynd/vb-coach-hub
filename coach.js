@@ -130,7 +130,18 @@ function teamRecord(teamId){
 }
 
 function statEventValue(e){
-  return e?.kind==='season_adjustment' ? (Number(e.adjustmentDelta)||0) : 1;
+  if(e?.kind==='season_adjustment')return Number(e.adjustmentDelta)||0;
+  return e?.type==='block_error'&&Number.isFinite(e.statValue)?Math.max(0,e.statValue):1;
+}
+
+function decrementBlockError(events,gameId,playerId,setNo){
+  const index=events.findLastIndex(e=>e.gameId===gameId&&e.playerId===playerId&&Number(e.set)===Number(setNo)&&e.type==='block_error'&&statEventValue(e)>0);
+  if(index<0)return false;
+  const e=events[index];
+  e.statValue=Math.max(0,statEventValue(e)-0.5);
+  // Preserve the original scoring event when its stat credit is reduced to zero.
+  if(e.statValue===0&&e.correction&&Number(e.scoreImpact)===0)events.splice(index,1);
+  return true;
 }
 
 function statTypeCount(events,type,playerId=null){
@@ -328,9 +339,9 @@ function openPlayerStatAdjuster(playerId){
   $('#modalBody').innerHTML=`
     <div class="notice"><strong>Season-level correction</strong><div class="muted">Use this for film review or stat corrections that should change overall totals without editing a specific match or set. Historical game scores and game logs stay unchanged.</div></div>
     <div class="stat-correction-grid" style="margin-top:12px">
-      ${rows.map(row=>`<div class="stat-correction-item"><span>${esc(row.label)}</span><div class="stat-correction-stepper"><button type="button" class="btn compact" data-season-adjust="${row.type}" data-delta="-1" ${row.count<=0?'disabled':''}>−</button><strong>${row.count}</strong><button type="button" class="btn compact primary" data-season-adjust="${row.type}" data-delta="1">+</button></div></div>`).join('')}
+      ${rows.map(row=>`<div class="stat-correction-item"><span>${esc(row.label)}</span><div class="stat-correction-stepper"><button type="button" class="btn compact" data-season-adjust="${row.type}" data-delta="${row.type==='block_error'?-0.5:-1}" ${row.count<=0?'disabled':''}>${row.type==='block_error'?'−0.5':'−'}</button><strong>${row.count}</strong><button type="button" class="btn compact primary" data-season-adjust="${row.type}" data-delta="${row.type==='block_error'?0.5:1}">${row.type==='block_error'?'+0.5':'+'}</button></div></div>`).join('')}
     </div>
-    <div class="muted helper" style="margin-top:12px">Total Attacks = Kills + Errors + Attempts. Overpasses are separate from receive errors. Serve results count toward serve attempts. Pass 0/1/2/3 corrections recalculate passing average automatically.</div>
+    <div class="muted helper" style="margin-top:12px">Block Error corrections use 0.5 increments. Total Attacks = Kills + Errors + Attempts. Overpasses are separate from receive errors. Serve results count toward serve attempts. Pass 0/1/2/3 corrections recalculate passing average automatically.</div>
     ${adjustments.length?`<hr><div class="muted">Film/overall adjustments saved for this player: ${adjustments.length}</div>`:''}
     <div class="button-row" style="margin-top:14px"><button type="button" class="btn" id="backToPlayerProfile">Back to Player</button></div>`;
 
@@ -527,7 +538,7 @@ function eventDescription(e){
     return `${label} • ${out?`#${out.jersey||'—'} ${out.firstName} ${out.lastName}`:'—'} → ${inn?`#${inn.jersey||'—'} ${inn.firstName} ${inn.lastName}`:'—'}`;
   }
   const d=statDefs[e.type],p=playerById(e.playerId);
-  return `${p?`#${p.jersey||'—'} ${p.firstName} ${p.lastName} — `:''}${d?.group||''} ${d?.label||e.type}`.trim();
+  return `${p?`#${p.jersey||'—'} ${p.firstName} ${p.lastName} — `:''}${d?.group||''} ${d?.label||e.type}${e.type==='block_error'&&Number.isFinite(e.statValue)?` (${statEventValue(e)})`:''}`.trim();
 }
 
 function eventRow(e){
@@ -791,13 +802,13 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
   const sets=[...setNumbers].sort((a,b)=>a-b);
   const selectedCorrectionPlayer=correctionPlayerId&&players.some(p=>p.id===correctionPlayerId)?correctionPlayerId:(players[0]?.id||'');
   const selectedCorrectionSet=sets.includes(Number(correctionSetNo))?Number(correctionSetNo):sets[0];
-  const correctionCount=type=>ev.filter(e=>e.playerId===selectedCorrectionPlayer&&Number(e.set)===selectedCorrectionSet&&e.type===type).length;
+  const correctionCount=type=>statTypeCount(ev.filter(e=>e.playerId===selectedCorrectionPlayer&&Number(e.set)===selectedCorrectionSet),type);
 
   $('#modalTitle').textContent='Correct Match';
   $('#modalBody').innerHTML=`<div class="form-grid"><div class="field"><label>Opponent</label><input id="editOpponent" value="${esc(g.opponent||'')}"></div><div class="field"><label>Date</label><input id="editGameDate" type="date" value="${esc(g.date||today())}"></div><div class="field"><label>Match Type</label><select id="editConferenceType"><option value="" ${!g.conferenceType?'selected':''}>Unclassified</option><option value="conference" ${g.conferenceType==='conference'?'selected':''}>Conference</option><option value="nonconference" ${g.conferenceType==='nonconference'?'selected':''}>Non-Conference</option></select></div></div>
   <div class="field"><label>Completed set scores</label><div class="list">${g.sets.map((set,i)=>`<div class="list-item"><strong>Set ${i+1}</strong><div class="set-score-edit"><input inputmode="numeric" data-set-home="${i}" value="${set.home}"><span>–</span><input inputmode="numeric" data-set-away="${i}" value="${set.away}"></div></div>`).join('')||'<div class="muted">No completed sets yet.</div>'}</div></div>
   <hr>
-  <div class="field"><label>Player Stat Corrections</label><div class="form-grid"><div class="field"><label>Player</label><select id="correctionPlayer">${players.map(p=>`<option value="${p.id}" ${p.id===selectedCorrectionPlayer?'selected':''}>${playerLabel(p)}</option>`).join('')}</select></div><div class="field"><label>Set</label><select id="correctionSet">${sets.map(n=>`<option value="${n}" ${n===selectedCorrectionSet?'selected':''}>Set ${n}</option>`).join('')}</select></div></div><div class="stat-correction-grid">${correctionStatTypes.map(([type,label])=>`<div class="stat-correction-item"><span>${esc(label)}</span><div class="stat-correction-stepper"><button type="button" class="btn compact" data-correct-stat="${type}" data-delta="-1">−</button><strong>${correctionCount(type)}</strong><button type="button" class="btn compact primary" data-correct-stat="${type}" data-delta="1">+</button></div></div>`).join('')}</div><div class="muted helper">Corrections change the player's stats only. Saved set scores are not changed. “Attempts” excludes kills and errors. Total Attacks = Kills + Errors + Attempts.</div></div>
+  <div class="field"><label>Player Stat Corrections</label><div class="form-grid"><div class="field"><label>Player</label><select id="correctionPlayer">${players.map(p=>`<option value="${p.id}" ${p.id===selectedCorrectionPlayer?'selected':''}>${playerLabel(p)}</option>`).join('')}</select></div><div class="field"><label>Set</label><select id="correctionSet">${sets.map(n=>`<option value="${n}" ${n===selectedCorrectionSet?'selected':''}>Set ${n}</option>`).join('')}</select></div></div><div class="stat-correction-grid">${correctionStatTypes.map(([type,label])=>`<div class="stat-correction-item"><span>${esc(label)}</span><div class="stat-correction-stepper"><button type="button" class="btn compact" data-correct-stat="${type}" data-delta="${type==='block_error'?-0.5:-1}">${type==='block_error'?'−0.5':'−'}</button><strong>${correctionCount(type)}</strong><button type="button" class="btn compact primary" data-correct-stat="${type}" data-delta="${type==='block_error'?0.5:1}">${type==='block_error'?'+0.5':'+'}</button></div></div>`).join('')}</div><div class="muted helper">Block Error corrections use 0.5 increments. Corrections change the player's stats only. Saved set scores are not changed. “Attempts” excludes kills and errors. Total Attacks = Kills + Errors + Attempts.</div></div>
   <hr>
   <div class="field"><label>Event log</label><div class="timeline correction-list">${ev.map(e=>`<div class="event-row"><span>${esc(eventDescription(e))} <span class="muted">• Set ${e.set}</span></span><button type="button" class="btn compact danger" data-delete-event="${e.id}">Delete</button></div>`).join('')||'<div class="muted">No events recorded.</div>'}</div><div class="muted helper">Deleting an event corrects totals. Player Stat Corrections above are usually faster for simple +/- fixes.</div></div>
   <div class="button-row"><button type="button" class="btn primary" id="saveGameCorrections">Save Corrections</button><button type="button" class="btn danger" id="deleteMatch">Delete Match</button></div>`;
@@ -818,7 +829,9 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
           g.rosterSnapshot.push({playerId:p.id,jersey:p.jersey||'',firstName:p.firstName||'',lastName:p.lastName||'',position:p.position||''});
         }
       }
-      state.events.push({id:uid('event'),kind:'stat',gameId:g.id,teamId:g.teamId,playerId,type,set:setNo,scoreImpact:0,correction:true,createdAt:new Date().toISOString()});
+      state.events.push({id:uid('event'),kind:'stat',gameId:g.id,teamId:g.teamId,playerId,type,set:setNo,scoreImpact:0,correction:true,...(type==='block_error'?{statValue:delta}:{}),createdAt:new Date().toISOString()});
+    }else if(type==='block_error'){
+      if(!decrementBlockError(state.events,g.id,playerId,setNo))return;
     }else{
       const idx=[...state.events].map((e,i)=>({e,i})).reverse().find(x=>x.e.gameId===g.id&&x.e.playerId===playerId&&Number(x.e.set)===setNo&&x.e.type===type)?.i;
       if(idx===undefined)return;
