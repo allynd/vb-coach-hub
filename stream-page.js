@@ -129,7 +129,7 @@ async function useTimeout(side){
   setTimeoutUsed(game,side,used+1);
   try{
     await window.CoachHubStreamOverlay?.timeout?.(side);
-    flashMessage='Timeout banner sent • automatically clears after 60 seconds.';
+    flashMessage='Timeout banner sent • automatically clears after 45 seconds.';
   }catch(e){
     console.warn('Could not send timeout banner',e);
     flashMessage='Timeout recorded. Live banner could not be sent.';
@@ -283,7 +283,7 @@ async function renderStreamPage(){
             <h3>${esc(team.name||'Team')} Timeout</h3>
             <div class="stream-timeout-count">${timeoutDots(homeTO)}</div>
           </div>
-          <div class="muted">${homeTO} of ${MAX_TIMEOUTS} used this set • banner runs 60 seconds</div>
+          <div class="muted">${homeTO} of ${MAX_TIMEOUTS} used this set • banner runs 45 seconds</div>
           <div class="stream-timeout-actions">
             <button type="button" class="btn primary stream-timeout-btn" id="streamHomeTimeout" ${homeTO>=MAX_TIMEOUTS?'disabled':''}>TIMEOUT • ${esc(team.name||'Team')}</button>
             <button type="button" class="btn compact ghost" id="streamHomeTimeoutUndo" ${homeTO<=0?'disabled':''}>Restore</button>
@@ -295,7 +295,7 @@ async function renderStreamPage(){
             <h3>${esc(game.opponent||'Opponent')} Timeout</h3>
             <div class="stream-timeout-count">${timeoutDots(awayTO)}</div>
           </div>
-          <div class="muted">${awayTO} of ${MAX_TIMEOUTS} used this set • banner runs 60 seconds</div>
+          <div class="muted">${awayTO} of ${MAX_TIMEOUTS} used this set • banner runs 45 seconds</div>
           <div class="stream-timeout-actions">
             <button type="button" class="btn stream-timeout-btn" id="streamAwayTimeout" ${awayTO>=MAX_TIMEOUTS?'disabled':''}>TIMEOUT • ${esc(game.opponent||'Opponent')}</button>
             <button type="button" class="btn compact ghost" id="streamAwayTimeoutUndo" ${awayTO<=0?'disabled':''}>Restore</button>

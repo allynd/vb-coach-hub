@@ -18,7 +18,7 @@ let mediaForTeamId=null;
 
 function esc(v=''){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function token(){return (crypto.randomUUID?.()||`${Date.now()}-${Math.random()}`).replaceAll('-','')+`${Math.random().toString(36).slice(2)}`;}
-function overlayUrl(t){return `${APP_URL}overlay.html?v=15.26&token=${encodeURIComponent(t||'')}`;}
+function overlayUrl(t){return `${APP_URL}overlay.html?v=15.27&token=${encodeURIComponent(t||'')}`;}
 
 async function getClient(){
   if(!clientPromise){
@@ -114,7 +114,7 @@ async function triggerTimeout(side='home'){
   const notice={
     side:side==='away'?'away':'home',
     teamName:side==='away'?(game.opponent||'Opponent'):(team.name||'Team'),
-    expiresAt:new Date(Date.now()+60000).toISOString()
+    expiresAt:new Date(Date.now()+45000).toISOString()
   };
   localStorage.setItem(timeoutNoticeKey(game),JSON.stringify(notice));
   lastHash='';
