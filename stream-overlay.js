@@ -9,7 +9,8 @@ const MEDIA_BUCKET='team-media';
 let clientPromise=null;
 let config=null;
 let enabled=false;
-let publishing=false;
+let activePublish=null;
+let lastPublishedAt=null;
 let lastHash='';
 let statusMessage='';
 let teamLogoUrl='';
@@ -25,7 +26,7 @@ async function getClient(){
     clientPromise=import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm').then(({createClient})=>createClient(
       SUPABASE_URL.trim(),SUPABASE_PUBLISHABLE_KEY.trim(),
       {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}
-    ));
+    )).catch(error=>{clientPromise=null;throw error;});
   }
   return clientPromise;
 }
@@ -103,7 +104,8 @@ async function clearTimeoutNotice(side=null){
   if(side&&current&&current.side!==side)return false;
   localStorage.removeItem(timeoutNoticeKey(game));
   lastHash='';
-  await publish(true);
+  const pushed=await publish(true);
+  if(!pushed.ok)throw new Error(pushed.message);
   return true;
 }
 
@@ -118,7 +120,8 @@ async function triggerTimeout(side='home'){
   };
   localStorage.setItem(timeoutNoticeKey(game),JSON.stringify(notice));
   lastHash='';
-  await publish(true);
+  const pushed=await publish(true);
+  if(!pushed.ok)throw new Error(pushed.message);
   return notice;
 }
 
@@ -209,35 +212,58 @@ async function getAdmin(teamId){
 }
 
 async function publish(force=false){
-  if(!enabled||publishing||!config?.token)return;
-  publishing=true;
-  try{
-    const state=await loadState();
-    const {team,game}=activeContext(state,config?.match_id);
-    if(!team||!game||team.id!==config?.team_id)return;
-    if(mediaForTeamId!==team.id)await refreshMediaUrls(team,config);
+  if(!enabled)return {ok:false,message:'The live widget is disabled. Open Widget Settings to enable it.'};
+  if(!config?.token)return {ok:false,message:'The live widget link is missing. Open Widget Settings to enable it.'};
+  // A forced push should never be silently discarded while auto-publishing is running.
+  if(activePublish){
+    if(!force)return activePublish;
+    await activePublish;
+  }
+  const operation=(async()=>{
+    try{
+      const state=await loadState();
+      const {team,game}=activeContext(state,config?.match_id);
+      if(!team||!game||team.id!==config.team_id)
+        throw new Error('No matching active team and match. Select the match, then open Widget Settings.');
+      if(mediaForTeamId!==team.id)await refreshMediaUrls(team,config);
 
-    const stable=buildState(state,team,game);
-    const hash=JSON.stringify(stable);
-    if(!force&&hash===lastHash)return;
+      const stable=buildState(state,team,game);
+      const hash=JSON.stringify(stable);
+      if(!force&&hash===lastHash)return {ok:true,unchanged:true,publishedAt:lastPublishedAt};
 
-    const payload={...stable,updatedAt:new Date().toISOString()};
-    const supabase=await getClient();
-    const {data,error}=await supabase.rpc('set_stream_overlay',{
-      p_team_id:team.id,
-      p_match_id:game.id,
-      p_token:config.token,
-      p_state:payload,
-      p_opponent_logo_path:config.opponent_logo_path||null
-    });
-    if(error)throw error;
-    config={...(config||{}),...(data||{}),match_id:game.id,state:payload};
-    enabled=true;
-    lastHash=hash;
-  }catch(e){
-    console.warn('Stream overlay publish failed',e);
-    statusMessage=describeError(e);
-  }finally{publishing=false;}
+      const payload={...stable,updatedAt:new Date().toISOString()};
+      const supabase=await getClient();
+      const controller=new AbortController();
+      const timer=setTimeout(()=>controller.abort(),10000);
+      let result;
+      try{
+        result=await supabase.rpc('set_stream_overlay',{
+          p_team_id:team.id,
+          p_match_id:game.id,
+          p_token:config.token,
+          p_state:payload,
+          p_opponent_logo_path:config.opponent_logo_path||null
+        }).abortSignal(controller.signal);
+      }finally{
+        clearTimeout(timer);
+      }
+      const {data,error}=result;
+      if(error)throw error;
+      config={...(config||{}),...(data||{}),match_id:game.id,state:payload};
+      enabled=true;
+      lastHash=hash;
+      lastPublishedAt=payload.updatedAt;
+      statusMessage='';
+      return {ok:true,publishedAt:lastPublishedAt};
+    }catch(e){
+      console.warn('Stream overlay publish failed',e);
+      statusMessage=describeError(e);
+      return {ok:false,message:statusMessage};
+    }
+  })();
+  const pending=operation.finally(()=>{if(activePublish===pending)activePublish=null;});
+  activePublish=pending;
+  return pending;
 }
 
 async function enableOverlay(){
@@ -258,7 +284,8 @@ async function enableOverlay(){
     enabled=true;
     await refreshMediaUrls(team,config);
     lastHash='';
-    await publish(true);
+    const pushed=await publish(true);
+    if(!pushed.ok)throw new Error(pushed.message);
     statusMessage='Live overlay enabled. Add the widget URL to Streamlabs on the streaming iPhone.';
     await openSettings();
   }catch(e){statusMessage=describeError(e);await openSettings(false);}
@@ -281,10 +308,12 @@ async function disableOverlay(){
 
 async function regenerate(){
   if(!config)return;
+  const previousToken=config.token;
   config.token=token();
   enabled=true;
   lastHash='';
-  await publish(true);
+  const pushed=await publish(true);
+  if(!pushed.ok){config.token=previousToken;statusMessage=pushed.message;await openSettings(false);return;}
   statusMessage='New overlay link generated. Replace the old URL in Streamlabs.';
   await openSettings();
 }
@@ -302,7 +331,8 @@ async function uploadOpponent(file){
     config.opponent_logo_path=path;
     opponentLogoUrl=await signPath(path);
     lastHash='';
-    await publish(true);
+    const pushed=await publish(true);
+    if(!pushed.ok)throw new Error(pushed.message);
     statusMessage='Opponent logo added to the live widget.';
     await openSettings();
   }catch(e){statusMessage=describeError(e);await openSettings(false);}
@@ -313,8 +343,8 @@ async function removeOpponentLogo(){
   config.opponent_logo_path=null;
   opponentLogoUrl='';
   lastHash='';
-  await publish(true);
-  statusMessage='Opponent logo removed.';
+  const pushed=await publish(true);
+  statusMessage=pushed.ok?'Opponent logo removed.':pushed.message;
   await openSettings();
 }
 
@@ -355,6 +385,7 @@ async function openSettings(refreshAdmin=true){
     </div>
     ${!user?'<div class="notice" style="margin-top:12px">Sign in under <strong>Team → Cloud & Accounts</strong> before enabling the live widget.</div>':''}
     ${statusMessage?`<div class="notice" style="margin-top:12px">${esc(statusMessage)}</div>`:''}
+    ${lastPublishedAt?`<div class="muted helper" style="margin-top:8px">Last successful widget push: ${esc(new Date(lastPublishedAt).toLocaleTimeString())}</div>`:''}
     ${enabled&&url?`
       <div class="field" style="margin-top:12px"><label>Streamlabs Widget URL</label><input id="streamWidgetUrl" readonly value="${esc(url)}"></div>
       <div class="button-row">
