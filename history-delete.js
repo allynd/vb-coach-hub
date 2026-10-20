@@ -102,8 +102,8 @@ async function openDeleteDialog(gameId){
 
   if(game.manualRecord){
     qs('#historyDeleteBody').innerHTML = `
-      <p class="muted">This is a manual record-only match. Delete the entire match to remove it from the team's historical W/L record.</p>
-      <div class="card"><strong>${game.manualMatchResult || ''} ${Number(game.manualSetsWon||0)}-${Number(game.manualSetsLost||0)}</strong><div class="sub muted">No player statistics are attached to this match.</div></div>
+      <p class="muted">Deleting this manually entered match removes the historical W/L result and all player and opponent stats added to its sets.</p>
+      <div class="card"><strong>${game.manualMatchResult || ''} ${Number(game.manualSetsWon||0)}-${Number(game.manualSetsLost||0)}</strong><div class="sub muted">All set-by-set statistics for this match will be deleted.</div></div>
       <div class="button-row" style="margin-top:14px">
         <button type="button" class="btn danger" id="historyDeleteMatch">Delete Entire Match</button>
       </div>`;

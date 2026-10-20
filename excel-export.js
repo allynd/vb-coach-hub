@@ -1,4 +1,5 @@
 // Browser export feature. Workbook generation stays on this device, including offline.
+import { correctionSetNumbers } from './match-corrections.mjs';
 const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fields=[['Kills','K'],['Attack Errors','E'],['Attempts','ATTEMPTS'],['Total Attacks','ATT'],['Hitting %','HIT','0.000'],['Aces','ACE'],['Serve Errors','SE'],['Serve Attempts','SA'],['Serve In %','SERVE','0.0%'],['Solo Blocks','BS'],['Block Assists','BA'],['Block Errors','BE','#,##0.##'],['Assists','A'],['Digs','D'],['Defensive Errors','DE'],['Set Errors / BHE','BHE'],['Receive Attempts','PR'],['Receive Errors','RE'],['Overpasses','OVERPASS'],['Pass Average','PASS','0.00'],['Receive Error %','RECEIVE_ERROR','0.0%'],['Receive Success %','RECEIVE_SUCCESS','0.0%'],['Defensive Success %','DEFENSE_SUCCESS','0.0%']];
 const key=p=>p.personId||p.id;
@@ -16,7 +17,7 @@ export function exportReportData(state,options,summarize){
  if(options.scope==='match'||options.scope==='set'){
   if(!game)throw Error('Choose a match.');
   events=state.events.filter(e=>e.gameId===game.id);
-  const ids=new Set([...(game.rosterSnapshot||[]).map(p=>typeof p==='string'?p:p.playerId),...events.map(e=>e.playerId).filter(Boolean)]);
+  const ids=new Set([...(game.rosterSnapshot||[]).map(p=>typeof p==='string'?p:p.playerId),...events.map(e=>e.playerId).filter(Boolean),...(game.manualRecord?state.players.filter(p=>p.teamId===team.id&&!p.archived).map(p=>p.id):[])]);
   people.clear();for(const id of ids){const p=state.players.find(p=>p.id===id);const snap=(game.rosterSnapshot||[]).find(p=>p.playerId===id);people.set(id,p||{...snap,id,firstName:snap?.firstName||'Historical player'});}
   if(options.scope==='set')events=events.filter(e=>Number(e.set)===Number(options.setNo));
  }
@@ -29,7 +30,7 @@ export function exportReportData(state,options,summarize){
  const section=(name,ev)=>({name,rows:rows(ev),teamStats:summarize(ev),hasTeamTotals:!selected&&!career});
  const sections=[section(options.scope==='match'?'Match Total':options.scope==='set'?`Set ${options.setNo}`:career?'Career Total':'Season Total',events)];
  if(options.scope==='match'){
-  const sets=[...new Set([...(game.sets||[]).map((s,i)=>Number(s.set)||i+1),...events.map(e=>Number(e.set)).filter(n=>n>0),...(game.complete?[]:[Number(game.currentSet)||1])])].sort((a,b)=>a-b);
+  const sets=correctionSetNumbers(game,events);
   for(const n of sets)sections.push(section(`Set ${n}`,events.filter(e=>Number(e.set)===n)));
  }
  if(career){for(const t of state.teams){const ids=new Set(state.games.filter(g=>g.teamId===t.id).map(g=>g.id));const ev=events.filter(e=>ids.has(e.gameId)||(e.kind==='season_adjustment'&&e.teamId===t.id));if(ev.length)sections.push(section(`${t.name} ${t.season||''}`,ev));}}
@@ -70,7 +71,7 @@ export function openExcelExport({state,summarize,gameId=null,playerId=null}){
  const players=state.players.filter(p=>p.teamId===team.id).sort((a,b)=>String(a.lastName).localeCompare(String(b.lastName)));
  dialog.innerHTML=`<form method="dialog" class="quick-stat-sheet"><div class="quick-stat-head"><h2>Export Excel Stats</h2><button class="icon-btn" aria-label="Close">✕</button></div><div class="field"><label>Period</label><select id="excelScope"><option value="set">One Set</option><option value="match">Match + Set Breakdowns</option><option value="season">Season</option><option value="career">Career</option></select></div><div class="field" id="excelMatchField"><label>Match</label><select id="excelMatch">${games.map(g=>`<option value="${escapeHtml(g.id)}">${escapeHtml(g.date)} vs ${escapeHtml(g.opponent)}</option>`).join('')}</select></div><div class="field" id="excelSetField"><label>Set</label><select id="excelSet"></select></div><div class="field"><label>Players</label><select id="excelPlayer"><option value="">All Players</option>${players.map(p=>`<option value="${escapeHtml(p.id)}">#${escapeHtml(p.jersey)} ${escapeHtml(p.firstName)} ${escapeHtml(p.lastName)}${p.archived?' (archived)':''}</option>`).join('')}</select></div><p class="muted">Career exports combine linked player profiles across saved seasons. Opponent missed serves appear on team set, match, and season reports.</p><p id="excelStatus" role="status"></p><button type="button" class="btn primary" id="excelDownload">Download .xlsx</button></form>`;
  const q=s=>dialog.querySelector(s);q('#excelScope').value=gameId?'match':'season';if(gameId)q('#excelMatch').value=gameId;if(playerId)q('#excelPlayer').value=playerId;
- function refresh(){const scope=q('#excelScope').value;const match=games.find(g=>g.id===q('#excelMatch').value);q('#excelMatchField').hidden=!['set','match'].includes(scope);q('#excelSetField').hidden=scope!=='set';const ev=state.events.filter(e=>e.gameId===match?.id);const sets=[...new Set([...(match?.sets||[]).map((s,i)=>Number(s.set)||i+1),...ev.map(e=>Number(e.set)).filter(n=>n>0),...(match&&!match.complete?[Number(match.currentSet)||1]:[])])].sort((a,b)=>a-b);q('#excelSet').innerHTML=sets.map(n=>`<option value="${n}">Set ${n}</option>`).join('');q('#excelDownload').disabled=['set','match'].includes(scope)&&(!match||(scope==='set'&&!sets.length));}
+ function refresh(){const scope=q('#excelScope').value;const match=games.find(g=>g.id===q('#excelMatch').value);q('#excelMatchField').hidden=!['set','match'].includes(scope);q('#excelSetField').hidden=scope!=='set';const ev=state.events.filter(e=>e.gameId===match?.id);const sets=match?correctionSetNumbers(match,ev):[];q('#excelSet').innerHTML=sets.map(n=>`<option value="${n}">Set ${n}</option>`).join('');q('#excelDownload').disabled=['set','match'].includes(scope)&&(!match||(scope==='set'&&!sets.length));}
  q('#excelScope').onchange=refresh;q('#excelMatch').onchange=refresh;refresh();
  q('#excelDownload').onclick=async()=>{const button=q('#excelDownload');button.disabled=true;q('#excelStatus').textContent='Preparing workbook…';try{const report=exportReportData(state,{teamId:team.id,scope:q('#excelScope').value,gameId:q('#excelMatch').value,setNo:q('#excelSet').value,playerId:q('#excelPlayer').value},summarize);const blob=await writeExcelReport(report);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=report.filename.replace(/[\\/:*?"<>|]/g,'-');document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);q('#excelStatus').textContent='Workbook downloaded.';}catch(e){q('#excelStatus').textContent=e.message;}finally{refresh();}};
  dialog.showModal();

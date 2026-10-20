@@ -46,7 +46,7 @@ async function openEditor(gameId=null){
   const lost = Number(game?.manualSetsLost ?? game?.sets?.[0]?.away ?? 0);
 
   $('#manualResultBody').innerHTML = `
-    <p class="muted">Use this for a match you want included in the team record without entering player statistics.</p>
+    <p class="muted">Enter the final match record now. Player and opponent stats can be added or corrected later, set by set.</p>
     <div class="form-grid">
       <div class="field"><label>Opponent</label><input id="manualOpponent" value="${esc(game?.opponent||'')}" placeholder="Opponent name"></div>
       <div class="field"><label>Date</label><input id="manualDate" type="date" value="${esc(game?.date||today())}"></div>
@@ -94,6 +94,14 @@ async function openEditor(gameId=null){
     const current = await loadState();
     if(!current?.activeTeamId){ alert('Choose a team first.'); return; }
     let target = gameId ? (current.games||[]).find(g=>g.id===gameId) : null;
+    // Keep existing set-by-set stats associated with a valid set if the record changes.
+    if(target){
+      const lastStatSet=Math.max(0,...(current.events||[]).filter(e=>e.gameId===target.id).map(e=>Number(e.set)||0));
+      if(lastStatSet>setsWon+setsLost){
+        alert(`There are already stats for Set ${lastStatSet}. Keep at least ${lastStatSet} sets in the match result, or remove/reassign those stats first.`);
+        return;
+      }
+    }
     if(!target){
       target={
         id:uid(),
@@ -119,9 +127,7 @@ async function openEditor(gameId=null){
       manualSetsLost:setsLost,
       manualMatchResult:result,
       complete:true,
-      // One aggregate score object intentionally represents the set record.
-      // Existing Coach Hub record calculations therefore count the match W/L,
-      // while no player stat events are created.
+      // Aggregate match W-L only; stat corrections retain their real set numbers.
       sets:[{set:1,home:setsWon,away:setsLost,manualAggregate:true}]
     });
 
@@ -160,9 +166,10 @@ async function openSummary(gameId){
       <div class="metric"><span class="muted">Site</span><b style="font-size:15px">${esc(g.siteType==='home'?'Home':g.siteType==='away'?'Away':'Neutral')}</b></div>
     </div>
     <div class="card" style="margin-top:12px"><div class="muted">Where</div><strong>${esc(g.location||'Not entered')}</strong></div>
-    <p class="muted">Manual record only — no player statistics are attached to this match.</p>
-    <div class="button-row"><button type="button" class="btn primary" id="editManualResult">Edit Result</button></div>`;
+    <p class="muted">You can add or correct player and opponent stats for each set without changing the saved match result.</p>
+    <div class="button-row"><button type="button" class="btn primary" id="addManualStats">Add / Correct Stats</button><button type="button" class="btn" id="editManualResult">Edit Result</button></div>`;
   $('#editManualResult').onclick=()=>{dialog.close();openEditor(gameId);};
+  $('#addManualStats').onclick=()=>{dialog.close();document.dispatchEvent(new CustomEvent('coach:edit-match-stats',{detail:{gameId}}));};
   dialog.showModal();
 }
 
@@ -207,4 +214,5 @@ async function enhance(){
 
 const observer=new MutationObserver(()=>enhance());
 observer.observe(document.body,{childList:true,subtree:true});
+document.addEventListener('coach:edit-manual-result',event=>openEditor(event.detail?.gameId));
 enhance();

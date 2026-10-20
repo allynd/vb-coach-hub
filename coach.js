@@ -1,5 +1,6 @@
 import { openExcelExport } from './excel-export.js';
 import { loadState, saveState } from './db.js';
+import { correctionSetNumbers, opponentMissedServeCount, changeOpponentMissedServes } from './match-corrections.mjs';
 
 const $ = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => [...root.querySelectorAll(s)];
@@ -74,6 +75,11 @@ function gameEvents(gameId){ return state.events.filter(e=>e.gameId===gameId); }
 function playerById(id){ return state.players.find(p=>p.id===id); }
 function gameRosterIds(g){ return (g.rosterSnapshot||[]).map(r=>typeof r==='string'?r:r.playerId); }
 function gameRosterPlayers(g){ return gameRosterIds(g).map(playerById).filter(Boolean); }
+function correctionPlayers(g){
+  if(!g.streamOnly && !g.manualRecord) return gameRosterPlayers(g);
+  const recorded=gameEvents(g.id).map(e=>playerById(e.playerId)).filter(Boolean);
+  return [...new Map([...gameRosterPlayers(g),...teamPlayers(g.teamId),...recorded].map(p=>[p.id,p])).values()];
+}
 function personKey(p){ return p?.personId || p?.id; }
 function playerCareerStats(p){
   const key=personKey(p);
@@ -123,6 +129,11 @@ function teamRecord(teamId){
   const games = state.games.filter(g=>g.teamId===teamId && g.complete);
   let w=0,l=0;
   for(const g of games){
+    if(g.manualRecord){
+      if(Number(g.manualSetsWon)>Number(g.manualSetsLost)) w++;
+      else if(Number(g.manualSetsLost)>Number(g.manualSetsWon)) l++;
+      continue;
+    }
     const ours=g.sets.filter(s=>s.home>s.away).length, theirs=g.sets.filter(s=>s.away>s.home).length;
     if(ours>theirs) w++; else if(theirs>ours) l++;
   }
@@ -174,7 +185,7 @@ function defensiveStatsHtml(events){
   return `<div class="stat-strip"><div class="metric"><span>Opp Missed Serves</span><b>${s.OSE}</b></div><div class="metric"><span>Receive Error %</span><b>${defensivePct(s.RECEIVE_ERROR)}</b></div><div class="metric"><span>Receive Success %</span><b>${defensivePct(s.RECEIVE_SUCCESS)}</b></div><div class="metric"><span>Defensive Success %</span><b>${defensivePct(s.DEFENSE_SUCCESS)}</b></div></div>`;
 }
 function matchDefensiveHtml(g,events){
-  const sets=[...new Set([...(g.sets||[]).map((s,i)=>Number(s.set)||i+1),g.currentSet||1,...events.map(e=>Number(e.set)).filter(n=>n>0)])].sort((a,b)=>a-b);
+  const sets=correctionSetNumbers(g,events);
   return '<h3>Match Stats</h3>'+defensiveStatsHtml(events)+sets.map(n=>'<h4>Set '+n+'</h4>'+defensiveStatsHtml(events.filter(e=>Number(e.set)===n))).join('');
 }
 
@@ -241,6 +252,11 @@ function renderDashboard(){
 }
 
 function matchListItem(g){
+  if(g.manualRecord){
+    const won=Number(g.manualSetsWon)||0,lost=Number(g.manualSetsLost)||0;
+    const result=g.complete?(won>lost?'W':'L'):'•';
+    return `<div class="list-item clickable" data-game="${g.id}"><div><strong>${esc(g.opponent||'Opponent')}</strong><div class="sub muted">${esc(g.date)} • Manual result • ${won}-${lost} sets</div></div><strong>${result}${g.complete?` ${won}-${lost}`:''}</strong></div>`;
+  }
   const us=g.sets.filter(s=>s.home>s.away).length, them=g.sets.filter(s=>s.away>s.home).length;
   const result=g.complete?(us>them?'W':'L'):'•';
   return `<div class="list-item clickable" data-game="${g.id}"><div><strong>${esc(g.opponent||'Opponent')}</strong><div class="sub muted">${esc(g.date)} • ${g.sets.map(s=>`${s.home}-${s.away}`).join(', ')||'No sets completed'}</div></div><strong>${result}${g.complete?` ${us}-${them}`:''}</strong></div>`;
@@ -780,26 +796,25 @@ function lineupSummaryHtml(g){
 
 function showGameSummary(gameId){
   const g=state.games.find(x=>x.id===gameId);if(!g)return;
-  const players=g.streamOnly
-    ? [...new Map([...gameRosterPlayers(g),...teamPlayers(g.teamId)].map(p=>[p.id,p])).values()]
-    : gameRosterPlayers(g);
+  const players=correctionPlayers(g);
   const ev=gameEvents(g.id);
   $('#modalTitle').textContent=`${state.teams.find(t=>t.id===g.teamId)?.name||'Team'} vs ${g.opponent}`;
   $('#modalBody').innerHTML=`${g.streamOnly?'<div class="notice"><strong>Stream-only match</strong><div class="muted">The score and result are saved. Player stats can be added now or later without changing the recorded score.</div></div>':''}<div class="stat-strip" style="margin-top:${g.streamOnly?'12px':'0'}"><div class="metric"><span>Date</span><b style="font-size:16px">${esc(g.date)}</b></div><div class="metric"><span>Sets</span><b style="font-size:16px">${g.sets.map(s=>`${s.home}-${s.away}`).join(', ')||'—'}</b></div></div>${g.streamOnly?'':'<hr><h3>Set Lineups</h3>'+lineupSummaryHtml(g)}<hr>${matchDefensiveHtml(g,ev)}<hr><div class="table-wrap"><table><thead><tr><th>Player</th><th>K</th><th>E</th><th>Attempts</th><th>Total Attacks</th><th>HIT%</th><th>ACE</th><th>BS</th><th>BA</th><th>BE</th><th>AST</th><th>DIG</th><th>DE</th><th>BHE</th><th>PASS</th><th>Receive Errors</th><th>Overpasses</th><th>Receive Error %</th><th>Receive Success %</th><th>Defensive Success %</th></tr></thead><tbody>${players.map(p=>{const s=summarizeEvents(ev,p.id);return `<tr><td>${playerLabel(p)}</td><td>${s.K}</td><td>${s.E}</td><td>${s.ATTEMPTS}</td><td>${s.ATT}</td><td>${fmtPct(s.HIT)}</td><td>${s.ACE}</td><td>${s.BS}</td><td>${s.BA}</td><td>${s.BE}</td><td>${s.A}</td><td>${s.D}</td><td>${s.DE}</td><td>${s.BHE}</td><td>${s.PASS.toFixed(2)}</td><td>${s.RE}</td><td>${s.OVERPASS}</td><td>${defensivePct(s.RECEIVE_ERROR)}</td><td>${defensivePct(s.RECEIVE_SUCCESS)}</td><td>${defensivePct(s.DEFENSE_SUCCESS)}</td></tr>`}).join('')||'<tr><td colspan="20" class="muted">No player stats attached yet.</td></tr>'}</tbody></table></div><hr><div class="button-row"><button type="button" class="btn" id="excelMatchStats">Export Excel</button><button type="button" class="btn primary" id="shareSummary">Share / Email</button><button type="button" class="btn" id="editMatch">${g.streamOnly?'Add / Correct Stats':'Correct Match'}</button></div>`;
+  if(g.manualRecord){
+    $('#modalBody .stat-strip .metric:nth-child(2) b').textContent=`${Number(g.manualSetsWon)||0}-${Number(g.manualSetsLost)||0} (match result)`;
+    $('#modalBody').insertAdjacentHTML('afterbegin','<div class="notice"><strong>Manually entered match</strong><div class="muted">Add or correct player and team stats for each set. The saved match result will not change.</div></div>');
+    $('#editMatch').textContent='Add / Correct Stats';
+    $('#editMatch').insertAdjacentHTML('beforebegin','<button type="button" class="btn" id="editManualMatchResult">Edit Result</button>');
+    $('#editManualMatchResult').onclick=()=>{$('#modal').close();document.dispatchEvent(new CustomEvent('coach:edit-manual-result',{detail:{gameId:g.id}}));};
+  }
   $('#excelMatchStats').onclick=()=>openExcelExport({state,summarize:summarizeEvents,gameId:g.id});
   $('#shareSummary').onclick=()=>shareMatch(g);$('#editMatch').onclick=()=>{$('#modal').close();openGameEditor(g);};$('#modal').showModal();
 }
 
 function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
   const ev=gameEvents(g.id).slice().sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
-  const players=g.streamOnly
-    ? [...new Map([...gameRosterPlayers(g),...teamPlayers(g.teamId)].map(p=>[p.id,p])).values()]
-    : gameRosterPlayers(g);
-  const setNumbers=new Set();
-  (g.sets||[]).forEach((s,i)=>setNumbers.add(Number(s.set)||i+1));
-  ev.forEach(e=>{const n=Number(e.set);if(Number.isFinite(n)&&n>0)setNumbers.add(n);});
-  if(!setNumbers.size)setNumbers.add(1);
-  const sets=[...setNumbers].sort((a,b)=>a-b);
+  const players=correctionPlayers(g);
+  const sets=correctionSetNumbers(g,ev);
   const selectedCorrectionPlayer=correctionPlayerId&&players.some(p=>p.id===correctionPlayerId)?correctionPlayerId:(players[0]?.id||'');
   const selectedCorrectionSet=sets.includes(Number(correctionSetNo))?Number(correctionSetNo):sets[0];
   const correctionCount=type=>statTypeCount(ev.filter(e=>e.playerId===selectedCorrectionPlayer&&Number(e.set)===selectedCorrectionSet),type);
@@ -813,8 +828,24 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
   <div class="field"><label>Event log</label><div class="timeline correction-list">${ev.map(e=>`<div class="event-row"><span>${esc(eventDescription(e))} <span class="muted">• Set ${e.set}</span></span><button type="button" class="btn compact danger" data-delete-event="${e.id}">Delete</button></div>`).join('')||'<div class="muted">No events recorded.</div>'}</div><div class="muted helper">Deleting an event corrects totals. Player Stat Corrections above are usually faster for simple +/- fixes.</div></div>
   <div class="button-row"><button type="button" class="btn primary" id="saveGameCorrections">Save Corrections</button><button type="button" class="btn danger" id="deleteMatch">Delete Match</button></div>`;
 
+  if(g.manualRecord){
+    const scoreSection=[...$$('#modalBody .field')].find(field=>field.querySelector(':scope > label')?.textContent==='Completed set scores');
+    if(scoreSection)scoreSection.innerHTML=`<label>Final match result</label><div class="notice"><strong>${Number(g.manualSetsWon)||0}-${Number(g.manualSetsLost)||0} sets</strong><div class="muted helper">This is the manually entered match result, not a Set 1 score. Choose Set 1–${(Number(g.manualSetsWon)||0)+(Number(g.manualSetsLost)||0)} below to add stats without changing the result.</div></div>`;
+  }
+
   $('#correctionPlayer')?.addEventListener('change',e=>openGameEditor(g,e.target.value,$('#correctionSet')?.value));
   $('#correctionSet')?.addEventListener('change',e=>openGameEditor(g,$('#correctionPlayer')?.value,Number(e.target.value)));
+
+  // Team-only corrections use the selected set, independent of the selected player.
+  const setPicker=$('#correctionSet')?.closest('.form-grid');
+  setPicker?.insertAdjacentHTML('afterend',`<div class="card" style="margin:12px 0"><label for="correctionOppServes"><strong>Team Stat Corrections • Set ${selectedCorrectionSet}</strong></label><div class="muted helper">Opponent missed serves (serve errors by the other team)</div><div class="button-row" style="margin-top:8px"><input id="correctionOppServes" type="number" min="0" max="250" step="1" inputmode="numeric" style="width:95px" value="${opponentMissedServeCount(ev,g.id,selectedCorrectionSet)}"><button type="button" class="btn primary compact" id="applyOppServes">Apply</button></div><div class="muted helper">Updates the set, match, and season totals. Saved scores stay unchanged.</div></div>`);
+  $('#applyOppServes')?.addEventListener('click',async()=>{
+    const input=$('#correctionOppServes');
+    try{
+      changeOpponentMissedServes(state.events,g,selectedCorrectionSet,input.value,()=>uid('event'));
+    }catch(error){alert(error.message);input.focus();return;}
+    await persist();openGameEditor(g,$('#correctionPlayer')?.value,selectedCorrectionSet);
+  });
 
   $$('[data-correct-stat]').forEach(btn=>btn.onclick=async()=>{
     const type=btn.dataset.correctStat,delta=Number(btn.dataset.delta)||0;
@@ -822,7 +853,7 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
     const setNo=Number($('#correctionSet')?.value)||selectedCorrectionSet;
     if(!playerId||!statDefs[type])return;
     if(delta>0){
-      if(g.streamOnly&&!gameRosterIds(g).includes(playerId)){
+      if((g.streamOnly||g.manualRecord)&&!gameRosterIds(g).includes(playerId)){
         const p=playerById(playerId);
         if(p){
           g.rosterSnapshot=Array.isArray(g.rosterSnapshot)?g.rosterSnapshot:[];
@@ -847,10 +878,10 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
 }
 
 function matchSummaryText(g){
-  const ev=gameEvents(g.id),players=gameRosterPlayers(g);const setLine=g.sets.map(s=>`${s.home}-${s.away}`).join(', ');
+  const ev=gameEvents(g.id),players=correctionPlayers(g);const setLine=g.manualRecord?`${Number(g.manualSetsWon)||0}-${Number(g.manualSetsLost)||0} (manual match result)`:g.sets.map(s=>`${s.home}-${s.away}`).join(', ');
   const lineupLines=Object.keys(g.setLineups||{}).sort((a,b)=>+a-+b).map(key=>{const l=g.setLineups[key];return `Set ${key} lineup (${l.serveReceive}): ${serviceLabels.map((x,i)=>`${x} ${playerById(l.slots?.[i])?.jersey||'—'}`).join(', ')} | Libero: ${(l.liberos||[]).map(id=>playerById(id)?.jersey||'—').join('/')||'None'}`;});
   const lines=players.map(p=>{const s=summarizeEvents(ev,p.id);return `#${p.jersey||'—'} ${p.firstName} ${p.lastName}: K ${s.K}, E ${s.E}, Attempts ${s.ATTEMPTS}, Total Attacks ${s.ATT}, HIT ${fmtPct(s.HIT)}, ACE ${s.ACE}, BS ${s.BS}, BA ${s.BA}, BE ${s.BE}, AST ${s.A}, DIG ${s.D}, DE ${s.DE}, BHE ${s.BHE}, PASS ${s.PASS.toFixed(2)}, Receive Errors ${s.RE}, Overpasses ${s.OVERPASS}, Receive Error % ${defensivePct(s.RECEIVE_ERROR)}, Receive Success % ${defensivePct(s.RECEIVE_SUCCESS)}, Defensive Success % ${defensivePct(s.DEFENSE_SUCCESS)}`;});
-  return `${state.teams.find(t=>t.id===g.teamId)?.name||'Team'} vs ${g.opponent}\n${g.date}\nOpp Missed Serves: ${summarizeEvents(ev).OSE}\n${[...new Set(ev.map(e=>e.set))].map(n=>`Set ${n} Opp Missed Serves: ${summarizeEvents(ev.filter(e=>e.set===n)).OSE}`).join('\n')}\nSets: ${setLine||'In progress'}\n\n${lineupLines.join('\n')}\n\n${lines.join('\n')}`;
+  return `${state.teams.find(t=>t.id===g.teamId)?.name||'Team'} vs ${g.opponent}\n${g.date}\nOpp Missed Serves: ${summarizeEvents(ev).OSE}\n${correctionSetNumbers(g,ev).map(n=>`Set ${n} Opp Missed Serves: ${summarizeEvents(ev.filter(e=>e.set===n)).OSE}`).join('\n')}\nSets: ${setLine||'In progress'}\n\n${lineupLines.join('\n')}\n\n${lines.join('\n')}`;
 }
 
 async function shareMatch(g){const text=matchSummaryText(g);const title=`${state.teams.find(t=>t.id===g.teamId)?.name||'Volleyball'} vs ${g.opponent}`;if(navigator.share){try{return await navigator.share({title,text});}catch(e){if(e.name==='AbortError')return;}}location.href=`mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text)}`;}
@@ -882,6 +913,13 @@ window.CoachHubStreamActions={
     await persist();render();return true;
   }
 };
+
+document.addEventListener('coach:edit-match-stats',event=>{
+  const game=state.games.find(g=>g.id===event.detail?.gameId);
+  if(!game)return;
+  if($('#modal').open)$('#modal').close();
+  openGameEditor(game);
+});
 
 function exportBackup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`volleyball-coach-backup-${today()}.vball.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 
