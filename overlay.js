@@ -1,11 +1,13 @@
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './supabase-config.js';
 
 const $=s=>document.querySelector(s);
-const CURRENT_BUILD='15.28';
+const CURRENT_BUILD='15.30';
 const token=new URLSearchParams(location.search).get('token')||'';
 let clientPromise=null;
 let lastPayload='';
 let lastGood=0;
+let lastContact=0;
+let polling=false;
 let lastHomeScore=null;
 let lastAwayScore=null;
 let timeoutHideTimer=null;
@@ -15,7 +17,7 @@ async function client(){
     clientPromise=import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm').then(({createClient})=>createClient(
       SUPABASE_URL.trim(),SUPABASE_PUBLISHABLE_KEY.trim(),
       {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}}
-    ));
+    )).catch(error=>{clientPromise=null;throw error;});
   }
   return clientPromise;
 }
@@ -117,25 +119,47 @@ function render(data){
 }
 
 async function poll(){
+  if(polling)return; // Avoid overlapping RPCs when the mobile connection is slow.
   if(!token){
     $('#setHistory').textContent='Missing Coach Hub overlay token.';
     return;
   }
+  polling=true;
   try{
     const supabase=await client();
-    const {data,error}=await supabase.rpc('get_stream_overlay',{p_token:token});
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),8000);
+    let result;
+    try{
+      result=await supabase.rpc('get_stream_overlay',{p_token:token}).abortSignal(controller.signal);
+    }finally{
+      clearTimeout(timer);
+    }
+    const {data,error}=result;
     if(error)throw error;
+    lastContact=Date.now();
     if(!data){
       $('#overlay').classList.add('waiting');
       $('#setHistory').textContent='Waiting for Coach Hub live score…';
+      $('#feedStatus').textContent='';
+      lastPayload='';
       return;
     }
     const payload=JSON.stringify(data);
-    if(payload!==lastPayload){lastPayload=payload;render(data);}
-    else if(Date.now()-lastGood>15000)$('#feedStatus').textContent='RECONNECTING';
+    if(payload!==lastPayload){
+      lastPayload=payload;
+      render(data);
+    }else{
+      // An unchanged score is still a healthy connection.
+      lastGood=Date.now();
+      $('#feedStatus').textContent='';
+    }
   }catch(e){
     console.warn('Live score poll failed',e);
-    if(Date.now()-lastGood>5000)$('#feedStatus').textContent='RECONNECTING';
+    if(Date.now()-Math.max(lastContact,lastGood)>5000)
+      $('#feedStatus').textContent='RECONNECTING';
+  }finally{
+    polling=false;
   }
 }
 
@@ -145,7 +169,7 @@ async function checkForOverlayUpdate(){
     if(!response.ok)return;
     const info=await response.json();
     const latest=String(info?.build||'').trim();
-    if(!latest||latest===CURRENT_BUILD)return;
+    if(!latest||latest===CURRENT_BUILD||new URLSearchParams(location.search).get('v')===latest)return;
     const next=new URL(location.href);
     next.searchParams.set('v',latest);
     if(token)next.searchParams.set('token',token);
