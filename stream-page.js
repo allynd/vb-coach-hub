@@ -98,18 +98,30 @@ async function openStreamMatchSetup(){
     if(!id)return alert('Could not start the Stream Match. Finish or close the current active match first.');
     modal.close();
     flashMessage='Stream-only match started. No lineup or rotation required.';
-    await window.CoachHubStreamOverlay?.publish?.();
+    reportPushFailure(await pushOverlay());
     await renderStreamPage();
   };
   modal.showModal();
+}
+
+async function pushOverlay(){
+  const publish=window.CoachHubStreamOverlay?.publish;
+  if(!publish)return {ok:false,message:'Overlay controls have not loaded.'};
+  try{return await publish();}
+  catch(e){return {ok:false,message:e?.message||'The widget could not be reached.'};}
+}
+
+function reportPushFailure(result){
+  if(!result?.ok)flashMessage=`Widget NOT updated: ${result?.message||'Unknown publish failure.'}`;
+  return !!result?.ok;
 }
 
 async function setServing(side){
   const api=window.CoachHubStreamActions;
   if(!api?.setServing)return;
   await api.setServing(side);
-  await window.CoachHubStreamOverlay?.publish?.();
-  flashMessage=`${side==='away'?'Opponent':'Team'} marked as serving.`;
+  const pushed=await pushOverlay();
+  flashMessage=pushed.ok?`${side==='away'?'Opponent':'Team'} marked as serving.`:`Widget NOT updated: ${pushed.message}`;
   await renderStreamPage();
 }
 
@@ -118,7 +130,7 @@ async function recordScore(type){
   const api=window.CoachHubStreamActions;
   if(!api?.recordScore)return alert('Stream controls are still loading. Try again in a moment.');
   await api.recordScore(type);
-  await window.CoachHubStreamOverlay?.publish?.();
+  reportPushFailure(await pushOverlay());
   await renderStreamPage();
 }
 
@@ -150,7 +162,7 @@ async function undoScore(){
   const api=window.CoachHubStreamActions;
   if(!api?.undo)return;
   await api.undo();
-  await window.CoachHubStreamOverlay?.publish?.();
+  reportPushFailure(await pushOverlay());
   await renderStreamPage();
 }
 
@@ -160,7 +172,7 @@ async function endSet(){
   const ended=await api.endSet();
   if(ended){
     flashMessage='Set saved. Stream Control is ready for the next set.';
-    await window.CoachHubStreamOverlay?.publish?.();
+    reportPushFailure(await pushOverlay());
   }
   await renderStreamPage();
 }
@@ -169,7 +181,7 @@ async function endMatch(){
   const api=window.CoachHubStreamActions;
   if(!api?.endMatch)return;
   await api.endMatch();
-  await window.CoachHubStreamOverlay?.publish?.();
+  reportPushFailure(await pushOverlay());
   await renderStreamPage();
 }
 
@@ -333,7 +345,11 @@ async function renderStreamPage(){
   $('#streamWidgetSettings')?.addEventListener('click',openWidgetSettings);
   $('#streamWidgetSettings2')?.addEventListener('click',openWidgetSettings);
   $('#streamUndo')?.addEventListener('click',undoScore);
-  $('#streamPublish')?.addEventListener('click',async()=>{await window.CoachHubStreamOverlay?.publish?.();flashMessage='Widget pushed.';await renderStreamPage();});
+  $('#streamPublish')?.addEventListener('click',async()=>{
+    const result=await pushOverlay();
+    flashMessage=result.ok?`Widget pushed successfully at ${new Date(result.publishedAt||Date.now()).toLocaleTimeString()}.`:`Widget NOT updated: ${result.message}`;
+    await renderStreamPage();
+  });
   $('#streamEndSet')?.addEventListener('click',endSet);
   $('#streamEndMatch')?.addEventListener('click',endMatch);
   $('#streamBackGameDay')?.addEventListener('click',goGameDay);
