@@ -897,7 +897,7 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
     openGameEditor(g,playerId,setNo);
   });
 
-  $('[data-delete-event]').forEach(btn=>btn.onclick=async()=>{
+  document.querySelectorAll('[data-delete-event]').forEach(btn=>btn.onclick=async()=>{
     if(!confirm('Delete this event?'))return;
     const deleted=state.events.find(e=>e.id===btn.dataset.deleteEvent);
     state.events=state.events.filter(e=>e.id!==btn.dataset.deleteEvent);
