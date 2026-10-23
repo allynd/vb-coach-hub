@@ -2,7 +2,7 @@
 import { correctionSetNumbers } from './match-corrections.mjs';
 import { withPerSetRates } from './player-set-rates.mjs';
 const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fields=[['Sets Played','SP'],['Kills','K'],['Kills / Set','KPS','0.00'],['Digs / Set','DPS','0.00'],['Attack Errors','E'],['Attempts','ATTEMPTS'],['2-Hand Tips','TIPS'],['Total Attacks','ATT'],['Hitting %','HIT','0.000'],['Aces','ACE'],['Serve Errors','SE'],['Foot Faults','FOOTFAULT'],['Serve Attempts','SA'],['Serve In %','SERVE','0.0%'],['Solo Blocks','BS'],['Block Assists','BA'],['Block Errors','BE','#,##0.##'],['Assists','A'],['Digs','D'],['Defensive Errors','DE'],['Set Errors / BHE','BHE'],['Non-Setter OOS','OOS'],['Receive Attempts','PR'],['Receive Errors','RE'],['Overpasses','OVERPASS'],['Pass Average','PASS','0.00'],['Receive Error %','RECEIVE_ERROR','0.0%'],['Receive Success %','RECEIVE_SUCCESS','0.0%'],['Defensive Success %','DEFENSE_SUCCESS','0.0%']];
+const fields=[['Sets Played','SP'],['Kills','K'],['Kills / Set','KPS','0.00'],['Digs / Set','DPS','0.00'],['Blocks / Set','BPS','0.00'],['Attack Errors','E'],['Attempts','ATTEMPTS'],['2-Hand Tips','TIPS'],['Total Attacks','ATT'],['Hitting %','HIT','0.000'],['Aces','ACE'],['Serve Errors','SE'],['Foot Faults','FOOTFAULT'],['Serve Attempts','SA'],['Serve In %','SERVE','0.0%'],['Solo Blocks','BS'],['Block Assists','BA'],['Block Errors','BE','#,##0.##'],['Assists','A'],['Digs','D'],['Defensive Errors','DE'],['Set Errors / BHE','BHE'],['Non-Setter OOS','OOS'],['Receive Attempts','PR'],['Receive Errors','RE'],['Overpasses','OVERPASS'],['Pass Average','PASS','0.00'],['Receive Error %','RECEIVE_ERROR','0.0%'],['Receive Success %','RECEIVE_SUCCESS','0.0%'],['Defensive Success %','DEFENSE_SUCCESS','0.0%']];
 const key=p=>p.personId||p.id;
 export function exportReportData(state,options,summarize){
  const team=state.teams.find(t=>t.id===options.teamId);if(!team)throw Error('Choose a team.');
@@ -68,6 +68,7 @@ export async function writeExcelReport(report){
      SERVE:`IF(${ref('SA')}=0,0,(${ref('SA')}-${ref('SE')})/${ref('SA')})`,
      KPS:`IF(${ref('SP')}=0,"",${ref('K')}/${ref('SP')})`,
      DPS:`IF(${ref('SP')}=0,"",${ref('D')}/${ref('SP')})`,
+     BPS:`IF(${ref('SP')}=0,"",(${ref('BS')}+${ref('BA')})/${ref('SP')})`,
      RECEIVE_ERROR:`IF(${ref('PR')}=0,"",${ref('RE')}/${ref('PR')})`,
      RECEIVE_SUCCESS:`IF(${ref('PR')}=0,"",(${ref('PR')}-${ref('RE')})/${ref('PR')})`,
      DEFENSE_SUCCESS:`IF(${ref('D')}+${ref('DE')}=0,"",${ref('D')}/(${ref('D')}+${ref('DE')}))`
@@ -77,7 +78,7 @@ export async function writeExcelReport(report){
    }
   });
   ws.autoFilter={from:'A5',to:`${ws.getRow(5).getCell(3+fields.length).address.replace(/\d+$/,'')}${5+section.rows.length}`};
-  const note=ws.getRow(8+data.length);note.getCell(1).value='Attempts exclude kills and attack errors; two-hand tips are included in non-kill attempts. Overpasses count as 1-point receptions (not receive errors). Kills/Set and Digs/Set use documented player set appearances. No recorded opportunities = blank rate. Career totals use linked player identities.';ws.mergeCells(note.number,1,note.number,8);note.height=46;note.getCell(1).alignment={wrapText:true};note.getCell(1).font={size:10,color:{argb:'FF596A7B'}};
+  const note=ws.getRow(8+data.length);note.getCell(1).value='Attempts exclude kills and attack errors; two-hand tips are included in non-kill attempts. Overpasses count as 1-point receptions (not receive errors). Kills/Set, Digs/Set and individual Blocks/Set use documented player set appearances; Blocks/Set = (solo blocks + block assists) / sets played. No recorded opportunities = blank rate. Career totals use linked player identities.';ws.mergeCells(note.number,1,note.number,8);note.height=46;note.getCell(1).alignment={wrapText:true};note.getCell(1).font={size:10,color:{argb:'FF596A7B'}};
  }
  const bytes=await wb.xlsx.writeBuffer();return new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }
