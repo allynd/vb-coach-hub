@@ -113,7 +113,7 @@ async function render(){
   const all=rosterFor(s,g),hidden=hiddenFor(g.id),players=all.filter(p=>!hidden.has(p.id));
   const events=(s.events||[]).filter(e=>e.gameId===g.id);
   const c=cols[tab],gName=esc(g.opponent||'Opponent'),team=s.teams?.find(t=>t.id===g.teamId);
-  const own=events.filter(e=>e.sheetDeviceId===deviceId&&e.source==='stat_sheet'&&Number(e.set)===setNo);
+  const own=events.filter(e=>e.sheetDeviceId===deviceId&&e.source==='stat_sheet');
   const latest=own.at(-1);
   const groups=tab==='hitting'?[['Hitting',4,'hitting'],['Setting',3,'setting']]:tab==='defense'?[['Defense',2,'defense'],['Blocking',3,'blocking']]:[[pageName(),c.length,tab]];
   const groupHeads=groups.map(([name,span,group])=>`<th class="sheet-group ${group}" colspan="${span}">${esc(name)}</th>`).join('');
@@ -185,7 +185,7 @@ async function addOpp(button){
 }
 async function undo(){
   const s=await loadState();
-  const e=(s?.events||[]).filter(e=>e.gameId===gameId&&Number(e.set)===setNo
+  const e=(s?.events||[]).filter(e=>e.gameId===gameId
       &&e.source==='stat_sheet'&&e.sheetDeviceId===deviceId).at(-1);
   if(e)await saveOperation(opFor(e,'delete'));
 }
@@ -286,7 +286,11 @@ async function openStatSheets(requestedGame=null,requestedSet=null){
   const d=dialog();if(!d.open)d.showModal();
   await render();syncNow();
 }
-window.CoachHubStatSheets={open:openStatSheets};
+async function deleteSheetEvent(event){
+  if(!event||event.source!=='stat_sheet')return;
+  await saveOperation(opFor(event,'delete'));
+}
+window.CoachHubStatSheets={open:openStatSheets,deleteEvent:deleteSheetEvent};
 document.addEventListener('coach:open-stat-sheets',e=>openStatSheets(e.detail?.gameId,e.detail?.set));
 function addNavigation(){
   const nav=$('.bottom-nav');
