@@ -29,6 +29,7 @@ const statDefs = {
   serve_error:   { label:'Error', group:'Serve', k:'SE', score:-1, negative:true },
   attack_kill:   { label:'Kill', group:'Attack', k:'K', score: 1, positive:true },
   attack_attempt:{ label:'Attempts', group:'Attack', k:'ATT', score:0 },
+  attack_tip:    { label:'2 Hand Push/Tip', group:'Attack', k:'TIP', score:0 },
   attack_error:  { label:'Error', group:'Attack', k:'E', score:-1, negative:true },
   block_solo:    { label:'Solo', group:'Block', k:'BS', score:1, positive:true },
   block_assist:  { label:'Assist', group:'Block', k:'BA', score:0, positive:true },
@@ -40,6 +41,7 @@ const statDefs = {
   pass_overpass: { label:'Overpass', group:'Pass', k:'OPASS', score:0 },
   set_assist:    { label:'Assist', group:'Set', k:'A', score:0, positive:true },
   set_error:     { label:'Error', group:'Set', k:'BHE', score:-1, negative:true },
+  set_oos:       { label:'OOS (non-setter)', group:'Set', k:'OOS', score:0 },
   dig:           { label:'Dig', group:'Defense', k:'D', score:0, positive:true },
   defense_error: { label:'Error', group:'Defense', k:'DE', score:-1, negative:true },
   team_point:    { label:'Team Point', group:'Score', k:'TP', score:1, positive:true, noPlayer:true },
@@ -51,10 +53,10 @@ const simpleStatTypes = new Set(['serve_ace','serve_in','serve_error','attack_ki
 
 const correctionStatTypes = [
   ['serve_ace','ACE'],['serve_in','Serve In'],['serve_error','Serve Err'],
-  ['attack_kill','Kill'],['attack_attempt','Attempts'],['attack_error','Attack Err'],
+  ['attack_kill','Kill'],['attack_attempt','Attempts'],['attack_error','Attack Err'],['attack_tip','2 Hand Push/Tip'],
   ['block_solo','Solo Block'],['block_assist','Block Assist'],['block_error','Block Err'],
   ['pass_3','Pass 3'],['pass_2','Pass 2'],['pass_1','Pass 1'],['pass_0','Receive Error'],['pass_overpass','Overpass'],
-  ['set_assist','Assist'],['set_error','Set Err / BHE'],
+  ['set_assist','Assist'],['set_error','Set Err / BHE'],['set_oos','OOS (non-setter)'],
   ['dig','Dig'],['defense_error','Def Err']
 ];
 const serviceLabels = ['I','II','III','IV','V','VI'];
@@ -165,16 +167,17 @@ function statTypeCount(events,type,playerId=null){
 function summarizeEvents(events, playerId=null){
   const ev = playerId ? events.filter(e=>e.playerId===playerId) : events.filter(e=>e.playerId);
   const count = type => statTypeCount(ev,type);
-  const K=count('attack_kill'), E=count('attack_error'), attOther=count('attack_attempt');
+  const K=count('attack_kill'), E=count('attack_error'), attOther=count('attack_attempt')+count('attack_tip');
   const ATT=K+E+attOther;
   const ace=count('serve_ace'), sin=count('serve_in'), se=count('serve_error'), SA=ace+sin+se;
   const p3=count('pass_3'),p2=count('pass_2'),p1=count('pass_1'),p0=count('pass_0'), overpass=count('pass_overpass'), PR=p3+p2+p1+p0+overpass;
+  const footFaults=ev.filter(e=>e.type==='serve_error'&&e.sheetDetail==='foot_fault').reduce((n,e)=>n+statEventValue(e),0);
   const D=count('dig'), DE=count('defense_error');
   return {
-    K,E,ATT,ATTEMPTS:attOther,HIT:ATT?((K-E)/ATT):0,
-    ACE:ace,SE:se,SA,SERVE:SA?((SA-se)/SA):0,
+    K,E,ATT,ATTEMPTS:attOther,TIPS:count('attack_tip'),HIT:ATT?((K-E)/ATT):0,
+    ACE:ace,SE:se,FOOTFAULT:footFaults,SA,SERVE:SA?((SA-se)/SA):0,
     BS:count('block_solo'),BA:count('block_assist'),BE:count('block_error'),
-    D,DE,A:count('set_assist'),BHE:count('set_error'),
+    D,DE,A:count('set_assist'),BHE:count('set_error'),OOS:count('set_oos'),
     PR,RE:p0,OVERPASS:overpass,RECEIVE_ERROR:PR?p0/PR:null,RECEIVE_SUCCESS:PR?(PR-p0)/PR:null,DEFENSE_SUCCESS:D+DE?D/(D+DE):null,OSE:playerId?0:statTypeCount(events,'opp_serve_error'),PASS:PR?((p3*3+p2*2+p1)/PR):0
   };
 }
@@ -394,7 +397,7 @@ function renderStats(){
   const games=state.games.filter(g=>g.teamId===state.activeTeamId);
   const gameIds=new Set(games.map(g=>g.id));
   const teamStats=summarizeEvents(seasonEvents(state.activeTeamId));
-  $('#main').innerHTML=`<div class="section-head"><div><h2>Season Stats</h2><div class="muted">Calculated from match events plus season-level corrections.</div></div><div class="button-row"><button class="btn" id="excelStats">Export Excel</button><button class="btn" id="csvStats">Export CSV</button><button class="btn primary" id="shareStats">Share Summary</button></div></div><div class="stat-strip" style="margin-bottom:14px"><div class="metric"><span class="muted">Team Hit %</span><b>${fmtPct(teamStats.HIT)}</b></div><div class="metric"><span class="muted">Serve In %</span><b>${Math.round(teamStats.SERVE*100)}%</b></div><div class="metric"><span class="muted">Pass Avg</span><b>${teamStats.PASS.toFixed(2)}</b></div><div class="metric"><span class="muted">Aces</span><b>${teamStats.ACE}</b></div></div>${defensiveStatsHtml(seasonEvents(state.activeTeamId))}<div class="table-wrap"><table><thead><tr><th>Player</th><th>K</th><th>E</th><th>Attempts</th><th>Total Attacks</th><th>HIT%</th><th>ACE</th><th>SE</th><th>BS</th><th>BA</th><th>BE</th><th>AST</th><th>DIG</th><th>DE</th><th>BHE</th><th>PASS</th><th>Receive Errors</th><th>Overpasses</th><th>Receive Error %</th><th>Receive Success %</th><th>Defensive Success %</th></tr></thead><tbody>${players.map(p=>{const s=playerSeasonStats(p);return `<tr><td>#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</td><td>${s.K}</td><td>${s.E}</td><td>${s.ATTEMPTS}</td><td>${s.ATT}</td><td>${fmtPct(s.HIT)}</td><td>${s.ACE}</td><td>${s.SE}</td><td>${s.BS}</td><td>${s.BA}</td><td>${s.BE}</td><td>${s.A}</td><td>${s.D}</td><td>${s.DE}</td><td>${s.BHE}</td><td>${s.PASS.toFixed(2)}</td><td>${s.RE}</td><td>${s.OVERPASS}</td><td>${defensivePct(s.RECEIVE_ERROR)}</td><td>${defensivePct(s.RECEIVE_SUCCESS)}</td><td>${defensivePct(s.DEFENSE_SUCCESS)}</td></tr>`;}).join('')}</tbody></table></div>`;
+  $('#main').innerHTML=`<div class="section-head"><div><h2>Season Stats</h2><div class="muted">Calculated from match events plus season-level corrections.</div></div><div class="button-row"><button class="btn" id="excelStats">Export Excel</button><button class="btn" id="csvStats">Export CSV</button><button class="btn primary" id="shareStats">Share Summary</button></div></div><div class="stat-strip" style="margin-bottom:14px"><div class="metric"><span class="muted">Team Hit %</span><b>${fmtPct(teamStats.HIT)}</b></div><div class="metric"><span class="muted">Serve In %</span><b>${Math.round(teamStats.SERVE*100)}%</b></div><div class="metric"><span class="muted">Pass Avg</span><b>${teamStats.PASS.toFixed(2)}</b></div><div class="metric"><span class="muted">Aces</span><b>${teamStats.ACE}</b></div></div>${defensiveStatsHtml(seasonEvents(state.activeTeamId))}<div class="table-wrap"><table><thead><tr><th>Player</th><th>K</th><th>E</th><th>Attempts</th><th>2-Hand Tips</th><th>Total Attacks</th><th>HIT%</th><th>ACE</th><th>SE</th><th>Foot Fault</th><th>BS</th><th>BA</th><th>BE</th><th>AST</th><th>DIG</th><th>DE</th><th>BHE</th><th>OOS</th><th>PASS</th><th>Receive Errors</th><th>Overpasses</th><th>Receive Error %</th><th>Receive Success %</th><th>Defensive Success %</th></tr></thead><tbody>${players.map(p=>{const s=playerSeasonStats(p);return `<tr><td>#${esc(p.jersey||'—')} ${esc(p.firstName)} ${esc(p.lastName)}</td><td>${s.K}</td><td>${s.E}</td><td>${s.ATTEMPTS}</td><td>${s.TIPS}</td><td>${s.ATT}</td><td>${fmtPct(s.HIT)}</td><td>${s.ACE}</td><td>${s.SE}</td><td>${s.FOOTFAULT}</td><td>${s.BS}</td><td>${s.BA}</td><td>${s.BE}</td><td>${s.A}</td><td>${s.D}</td><td>${s.DE}</td><td>${s.BHE}</td><td>${s.OOS}</td><td>${s.PASS.toFixed(2)}</td><td>${s.RE}</td><td>${s.OVERPASS}</td><td>${defensivePct(s.RECEIVE_ERROR)}</td><td>${defensivePct(s.RECEIVE_SUCCESS)}</td><td>${defensivePct(s.DEFENSE_SUCCESS)}</td></tr>`;}).join('')}</tbody></table></div>`;
   $('#excelStats').onclick=()=>openExcelExport({state,summarize:summarizeEvents});
   $('#csvStats').onclick=exportSeasonCsv;
   $('#shareStats').onclick=shareSeasonSummary;
@@ -799,7 +802,7 @@ function showGameSummary(gameId){
   const players=correctionPlayers(g);
   const ev=gameEvents(g.id);
   $('#modalTitle').textContent=`${state.teams.find(t=>t.id===g.teamId)?.name||'Team'} vs ${g.opponent}`;
-  $('#modalBody').innerHTML=`${g.streamOnly?'<div class="notice"><strong>Stream-only match</strong><div class="muted">The score and result are saved. Player stats can be added now or later without changing the recorded score.</div></div>':''}<div class="stat-strip" style="margin-top:${g.streamOnly?'12px':'0'}"><div class="metric"><span>Date</span><b style="font-size:16px">${esc(g.date)}</b></div><div class="metric"><span>Sets</span><b style="font-size:16px">${g.sets.map(s=>`${s.home}-${s.away}`).join(', ')||'—'}</b></div></div>${g.streamOnly?'':'<hr><h3>Set Lineups</h3>'+lineupSummaryHtml(g)}<hr>${matchDefensiveHtml(g,ev)}<hr><div class="table-wrap"><table><thead><tr><th>Player</th><th>K</th><th>E</th><th>Attempts</th><th>Total Attacks</th><th>HIT%</th><th>ACE</th><th>BS</th><th>BA</th><th>BE</th><th>AST</th><th>DIG</th><th>DE</th><th>BHE</th><th>PASS</th><th>Receive Errors</th><th>Overpasses</th><th>Receive Error %</th><th>Receive Success %</th><th>Defensive Success %</th></tr></thead><tbody>${players.map(p=>{const s=summarizeEvents(ev,p.id);return `<tr><td>${playerLabel(p)}</td><td>${s.K}</td><td>${s.E}</td><td>${s.ATTEMPTS}</td><td>${s.ATT}</td><td>${fmtPct(s.HIT)}</td><td>${s.ACE}</td><td>${s.BS}</td><td>${s.BA}</td><td>${s.BE}</td><td>${s.A}</td><td>${s.D}</td><td>${s.DE}</td><td>${s.BHE}</td><td>${s.PASS.toFixed(2)}</td><td>${s.RE}</td><td>${s.OVERPASS}</td><td>${defensivePct(s.RECEIVE_ERROR)}</td><td>${defensivePct(s.RECEIVE_SUCCESS)}</td><td>${defensivePct(s.DEFENSE_SUCCESS)}</td></tr>`}).join('')||'<tr><td colspan="20" class="muted">No player stats attached yet.</td></tr>'}</tbody></table></div><hr><div class="button-row"><button type="button" class="btn" id="excelMatchStats">Export Excel</button><button type="button" class="btn primary" id="shareSummary">Share / Email</button><button type="button" class="btn" id="editMatch">${g.streamOnly?'Add / Correct Stats':'Correct Match'}</button></div>`;
+  $('#modalBody').innerHTML=`${g.streamOnly?'<div class="notice"><strong>Stream-only match</strong><div class="muted">The score and result are saved. Player stats can be added now or later without changing the recorded score.</div></div>':''}<div class="stat-strip" style="margin-top:${g.streamOnly?'12px':'0'}"><div class="metric"><span>Date</span><b style="font-size:16px">${esc(g.date)}</b></div><div class="metric"><span>Sets</span><b style="font-size:16px">${g.sets.map(s=>`${s.home}-${s.away}`).join(', ')||'—'}</b></div></div>${g.streamOnly?'':'<hr><h3>Set Lineups</h3>'+lineupSummaryHtml(g)}<hr>${matchDefensiveHtml(g,ev)}<hr><div class="table-wrap"><table><thead><tr><th>Player</th><th>K</th><th>E</th><th>Attempts</th><th>2-Hand Tips</th><th>Total Attacks</th><th>HIT%</th><th>ACE</th><th>BS</th><th>BA</th><th>BE</th><th>AST</th><th>DIG</th><th>DE</th><th>BHE</th><th>OOS</th><th>PASS</th><th>Receive Errors</th><th>Overpasses</th><th>Receive Error %</th><th>Receive Success %</th><th>Defensive Success %</th></tr></thead><tbody>${players.map(p=>{const s=summarizeEvents(ev,p.id);return `<tr><td>${playerLabel(p)}</td><td>${s.K}</td><td>${s.E}</td><td>${s.ATTEMPTS}</td><td>${s.TIPS}</td><td>${s.ATT}</td><td>${fmtPct(s.HIT)}</td><td>${s.ACE}</td><td>${s.BS}</td><td>${s.BA}</td><td>${s.BE}</td><td>${s.A}</td><td>${s.D}</td><td>${s.DE}</td><td>${s.BHE}</td><td>${s.OOS}</td><td>${s.PASS.toFixed(2)}</td><td>${s.RE}</td><td>${s.OVERPASS}</td><td>${defensivePct(s.RECEIVE_ERROR)}</td><td>${defensivePct(s.RECEIVE_SUCCESS)}</td><td>${defensivePct(s.DEFENSE_SUCCESS)}</td></tr>`}).join('')||'<tr><td colspan="22" class="muted">No player stats attached yet.</td></tr>'}</tbody></table></div><hr><div class="button-row"><button type="button" class="btn" id="excelMatchStats">Export Excel</button><button type="button" class="btn primary" id="shareSummary">Share / Email</button><button type="button" class="btn" id="editMatch">${g.streamOnly?'Add / Correct Stats':'Correct Match'}</button></div>`;
   if(g.manualRecord){
     $('#modalBody .stat-strip .metric:nth-child(2) b').textContent=`${Number(g.manualSetsWon)||0}-${Number(g.manualSetsLost)||0} (match result)`;
     $('#modalBody').insertAdjacentHTML('afterbegin','<div class="notice"><strong>Manually entered match</strong><div class="muted">Add or correct player and team stats for each set. The saved match result will not change.</div></div>');
@@ -823,7 +826,7 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
   $('#modalBody').innerHTML=`<div class="form-grid"><div class="field"><label>Opponent</label><input id="editOpponent" value="${esc(g.opponent||'')}"></div><div class="field"><label>Date</label><input id="editGameDate" type="date" value="${esc(g.date||today())}"></div><div class="field"><label>Match Type</label><select id="editConferenceType"><option value="" ${!g.conferenceType?'selected':''}>Unclassified</option><option value="conference" ${g.conferenceType==='conference'?'selected':''}>Conference</option><option value="nonconference" ${g.conferenceType==='nonconference'?'selected':''}>Non-Conference</option></select></div></div>
   <div class="field"><label>Completed set scores</label><div class="list">${g.sets.map((set,i)=>`<div class="list-item"><strong>Set ${i+1}</strong><div class="set-score-edit"><input inputmode="numeric" data-set-home="${i}" value="${set.home}"><span>–</span><input inputmode="numeric" data-set-away="${i}" value="${set.away}"></div></div>`).join('')||'<div class="muted">No completed sets yet.</div>'}</div></div>
   <hr>
-  <div class="field"><label>Player Stat Corrections</label><div class="form-grid"><div class="field"><label>Player</label><select id="correctionPlayer">${players.map(p=>`<option value="${p.id}" ${p.id===selectedCorrectionPlayer?'selected':''}>${playerLabel(p)}</option>`).join('')}</select></div><div class="field"><label>Set</label><select id="correctionSet">${sets.map(n=>`<option value="${n}" ${n===selectedCorrectionSet?'selected':''}>Set ${n}</option>`).join('')}</select></div></div><div class="stat-correction-grid">${correctionStatTypes.map(([type,label])=>`<div class="stat-correction-item"><span>${esc(label)}</span><div class="stat-correction-stepper"><button type="button" class="btn compact" data-correct-stat="${type}" data-delta="${type==='block_error'?-0.5:-1}">${type==='block_error'?'−0.5':'−'}</button><strong>${correctionCount(type)}</strong><button type="button" class="btn compact primary" data-correct-stat="${type}" data-delta="${type==='block_error'?0.5:1}">${type==='block_error'?'+0.5':'+'}</button></div></div>`).join('')}</div><div class="muted helper">Block Error corrections use 0.5 increments. Corrections change the player's stats only. Saved set scores are not changed. “Attempts” excludes kills and errors. Total Attacks = Kills + Errors + Attempts.</div></div>
+  <div class="button-row"><button type="button" class="btn primary" id="useSheetCorrections">Use Interactive Stat Sheets</button><span class="muted helper">Or continue using the classic step-by-step corrections below.</span></div><div class="field"><label>Player Stat Corrections</label><div class="form-grid"><div class="field"><label>Player</label><select id="correctionPlayer">${players.map(p=>`<option value="${p.id}" ${p.id===selectedCorrectionPlayer?'selected':''}>${playerLabel(p)}</option>`).join('')}</select></div><div class="field"><label>Set</label><select id="correctionSet">${sets.map(n=>`<option value="${n}" ${n===selectedCorrectionSet?'selected':''}>Set ${n}</option>`).join('')}</select></div></div><div class="stat-correction-grid">${correctionStatTypes.map(([type,label])=>`<div class="stat-correction-item"><span>${esc(label)}</span><div class="stat-correction-stepper"><button type="button" class="btn compact" data-correct-stat="${type}" data-delta="${type==='block_error'?-0.5:-1}">${type==='block_error'?'−0.5':'−'}</button><strong>${correctionCount(type)}</strong><button type="button" class="btn compact primary" data-correct-stat="${type}" data-delta="${type==='block_error'?0.5:1}">${type==='block_error'?'+0.5':'+'}</button></div></div>`).join('')}</div><div class="muted helper">Block Error corrections use 0.5 increments. Corrections change the player's stats only. Saved set scores are not changed. “Attempts” excludes kills and errors. Total Attacks = Kills + Errors + Attempts.</div></div>
   <hr>
   <div class="field"><label>Event log</label><div class="timeline correction-list">${ev.map(e=>`<div class="event-row"><span>${esc(eventDescription(e))} <span class="muted">• Set ${e.set}</span></span><button type="button" class="btn compact danger" data-delete-event="${e.id}">Delete</button></div>`).join('')||'<div class="muted">No events recorded.</div>'}</div><div class="muted helper">Deleting an event corrects totals. Player Stat Corrections above are usually faster for simple +/- fixes.</div></div>
   <div class="button-row"><button type="button" class="btn primary" id="saveGameCorrections">Save Corrections</button><button type="button" class="btn danger" id="deleteMatch">Delete Match</button></div>`;
@@ -833,6 +836,11 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
     if(scoreSection)scoreSection.innerHTML=`<label>Final match result</label><div class="notice"><strong>${Number(g.manualSetsWon)||0}-${Number(g.manualSetsLost)||0} sets</strong><div class="muted helper">This is the manually entered match result, not a Set 1 score. Choose Set 1–${(Number(g.manualSetsWon)||0)+(Number(g.manualSetsLost)||0)} below to add stats without changing the result.</div></div>`;
   }
 
+  $('#useSheetCorrections')?.addEventListener('click',()=>{
+    const selectedSet=Number($('#correctionSet')?.value)||selectedCorrectionSet;
+    $('#modal').close();
+    document.dispatchEvent(new CustomEvent('coach:open-stat-sheets',{detail:{gameId:g.id,set:selectedSet}}));
+  });
   $('#correctionPlayer')?.addEventListener('change',e=>openGameEditor(g,e.target.value,$('#correctionSet')?.value));
   $('#correctionSet')?.addEventListener('change',e=>openGameEditor(g,$('#correctionPlayer')?.value,Number(e.target.value)));
 
@@ -852,6 +860,7 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
     const playerId=$('#correctionPlayer')?.value||selectedCorrectionPlayer;
     const setNo=Number($('#correctionSet')?.value)||selectedCorrectionSet;
     if(!playerId||!statDefs[type])return;
+    let deletedSheetEvent=null;
     if(delta>0){
       if((g.streamOnly||g.manualRecord)&&!gameRosterIds(g).includes(playerId)){
         const p=playerById(playerId);
@@ -862,16 +871,30 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
       }
       state.events.push({id:uid('event'),kind:'stat',gameId:g.id,teamId:g.teamId,playerId,type,set:setNo,scoreImpact:0,correction:true,...(type==='block_error'?{statValue:delta}:{}),createdAt:new Date().toISOString()});
     }else if(type==='block_error'){
-      if(!decrementBlockError(state.events,g.id,playerId,setNo))return;
+      const idx=state.events.findLastIndex(e=>e.gameId===g.id&&e.playerId===playerId&&Number(e.set)===setNo&&e.type===type&&statEventValue(e)>0);
+      if(idx<0)return;
+      if(state.events[idx].source==='stat_sheet') deletedSheetEvent=state.events.splice(idx,1)[0];
+      else if(!decrementBlockError(state.events,g.id,playerId,setNo))return;
     }else{
       const idx=[...state.events].map((e,i)=>({e,i})).reverse().find(x=>x.e.gameId===g.id&&x.e.playerId===playerId&&Number(x.e.set)===setNo&&x.e.type===type)?.i;
       if(idx===undefined)return;
+      deletedSheetEvent=state.events[idx].source==='stat_sheet'?state.events[idx]:null;
       state.events.splice(idx,1);
     }
-    await persist();openGameEditor(g,playerId,setNo);
+    await persist();
+    if(deletedSheetEvent)await window.CoachHubStatSheets?.deleteEvent(deletedSheetEvent);
+    openGameEditor(g,playerId,setNo);
   });
 
-  $$('[data-delete-event]').forEach(btn=>btn.onclick=async()=>{if(!confirm('Delete this event?'))return;state.events=state.events.filter(e=>e.id!==btn.dataset.deleteEvent);for(const l of Object.values(g.setLineups||{}))l.substitutions=(l.substitutions||[]).filter(s=>s.id!==btn.dataset.deleteEvent);await persist();openGameEditor(g,selectedCorrectionPlayer,selectedCorrectionSet);});
+  $('[data-delete-event]').forEach(btn=>btn.onclick=async()=>{
+    if(!confirm('Delete this event?'))return;
+    const deleted=state.events.find(e=>e.id===btn.dataset.deleteEvent);
+    state.events=state.events.filter(e=>e.id!==btn.dataset.deleteEvent);
+    for(const l of Object.values(g.setLineups||{}))l.substitutions=(l.substitutions||[]).filter(s=>s.id!==btn.dataset.deleteEvent);
+    await persist();
+    if(deleted?.source==='stat_sheet')await window.CoachHubStatSheets?.deleteEvent(deleted);
+    openGameEditor(g,selectedCorrectionPlayer,selectedCorrectionSet);
+  });
   $('#saveGameCorrections').onclick=async()=>{g.opponent=$('#editOpponent').value.trim()||'Opponent';g.date=$('#editGameDate').value||today();g.conferenceType=$('#editConferenceType')?.value||'';$$('[data-set-home]').forEach(input=>{const i=+input.dataset.setHome;g.sets[i].home=Math.max(0,+input.value||0);});$$('[data-set-away]').forEach(input=>{const i=+input.dataset.setAway;g.sets[i].away=Math.max(0,+input.value||0);});await persist();$('#modal').close();showGameSummary(g.id);render();};
   $('#deleteMatch').onclick=async()=>{if(!confirm(`Permanently delete the match vs ${g.opponent} and all of its stats?`))return;state.events=state.events.filter(e=>e.gameId!==g.id);state.games=state.games.filter(x=>x.id!==g.id);if(state.activeGameId===g.id)state.activeGameId=null;await persist();$('#modal').close();setView('games');};
   if(!$('#modal').open)$('#modal').showModal();
@@ -896,7 +919,7 @@ async function sharePlayerSummary(p){
 
 function csvCell(v){const x=String(v??'');return /[",\n]/.test(x)?`"${x.replaceAll('"','""')}"`:x;}
 function exportSeasonCsv(){
-  const t=activeTeam();const header=['Player','Jersey','Position','Kills','Errors','Attempts','Total Attacks','Hitting %','Aces','Serve Errors','Serve Attempts','Serve In %','Solo Blocks','Block Assists','Block Errors','Assists','Digs','Defensive Errors','Set Errors/BHE','Pass Receptions','Pass Avg','Receive Errors','Overpasses','Receive Error %','Receive Success %','Defensive Success %'];const rows=teamPlayers().map(p=>{const s=playerSeasonStats(p);return [`${p.firstName} ${p.lastName}`,p.jersey,p.position,s.K,s.E,s.ATTEMPTS,s.ATT,fmtPct(s.HIT),s.ACE,s.SE,s.SA,(s.SERVE*100).toFixed(1)+'%',s.BS,s.BA,s.BE,s.A,s.D,s.DE,s.BHE,s.PR,s.PASS.toFixed(2),s.RE,s.OVERPASS,defensivePct(s.RECEIVE_ERROR),defensivePct(s.RECEIVE_SUCCESS),defensivePct(s.DEFENSE_SUCCESS)]});const csv=[header,...rows].map(r=>r.map(csvCell).join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${(t?.name||'team').replace(/[^a-z0-9]+/gi,'-').toLowerCase()}-${t?.season||'season'}-stats.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  const t=activeTeam();const header=['Player','Jersey','Position','Kills','Errors','Attempts','2-Hand Tips','Total Attacks','Hitting %','Aces','Serve Errors','Foot Faults','Serve Attempts','Serve In %','Solo Blocks','Block Assists','Block Errors','Assists','Digs','Defensive Errors','Set Errors/BHE','Non-Setter OOS','Pass Receptions','Pass Avg','Receive Errors','Overpasses','Receive Error %','Receive Success %','Defensive Success %'];const rows=teamPlayers().map(p=>{const s=playerSeasonStats(p);return [`${p.firstName} ${p.lastName}`,p.jersey,p.position,s.K,s.E,s.ATTEMPTS,s.TIPS,s.ATT,fmtPct(s.HIT),s.ACE,s.SE,s.FOOTFAULT,s.SA,(s.SERVE*100).toFixed(1)+'%',s.BS,s.BA,s.BE,s.A,s.D,s.DE,s.BHE,s.OOS,s.PR,s.PASS.toFixed(2),s.RE,s.OVERPASS,defensivePct(s.RECEIVE_ERROR),defensivePct(s.RECEIVE_SUCCESS),defensivePct(s.DEFENSE_SUCCESS)]});const csv=[header,...rows].map(r=>r.map(csvCell).join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${(t?.name||'team').replace(/[^a-z0-9]+/gi,'-').toLowerCase()}-${t?.season||'season'}-stats.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 
 window.CoachHubStreamActions={
@@ -913,6 +936,14 @@ window.CoachHubStreamActions={
     await persist();render();return true;
   }
 };
+
+// The sheet interface uses an atomic IndexedDB merge. Refresh this module's
+// in-memory state so subsequent classic stats/exports also see shared events.
+document.addEventListener('coach:sheet-events-updated',async()=>{
+  const updated=await loadState();
+  if(updated)state=migrateState(updated);
+  if(!$('#modal').open)render();
+});
 
 document.addEventListener('coach:edit-match-stats',event=>{
   const game=state.games.find(g=>g.id===event.detail?.gameId);

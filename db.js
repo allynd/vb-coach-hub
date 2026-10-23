@@ -44,3 +44,30 @@ export async function clearState() {
     tx.onerror = () => reject(tx.error);
   });
 }
+
+/**
+ * Atomic read/modify/write for concurrent sheet updates within this device.
+ * Mutator must be synchronous to preserve the IndexedDB transaction.
+ */
+export async function mutateState(mutator) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    const get = store.get(KEY);
+    let next;
+    get.onsuccess = () => {
+      try {
+        next = mutator(get.result || {});
+        store.put(next, KEY);
+      } catch (error) {
+        tx.abort();
+        reject(error);
+      }
+    };
+    get.onerror = () => reject(get.error);
+    tx.oncomplete = () => resolve(next);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('State update cancelled'));
+  });
+}
