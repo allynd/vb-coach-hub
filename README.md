@@ -119,6 +119,14 @@ Coach Hub supports **Simple** and **Advanced** stat-entry modes.
 
 A setting/ball-handling error is recorded as a player statistic only and does **not** automatically award the opponent a point. The rally result is recorded separately.
 
+### Player Per-Set Stats and Overpasses
+
+Each player's **Kills/Set (K/S)** and **Digs/Set (D/S)** are available at match, season, and linked-career levels, including player profiles, match/season tables, shared summaries, CSV and Excel exports. The denominator is **sets the player participated in**, not all of the team's sets: a set is counted once when it has a recorded player stat, a submitted lineup or substitution for a set that was actually played, or an explicit **Played Set** marker.
+
+For older, film-entered, and manual-result matches, open **Sheets → Players → Played Set** to include a player who participated in that set without any recorded stat. Merely appearing on the roster, or being named a libero without entering, does not count as playing. When participation is unknown, K/S and D/S display **—** instead of guessing. Season-only adjustments change totals, but do not themselves establish a set appearance.
+
+Pass average uses **3 → 3**, **2 → 2**, **1 → 1**, **Overpass → 1**, and **Receive Error → 0**. An overpass is still tracked separately and remains part of the total serve-receive opportunities. These calculations automatically apply to prior recorded events; no database migration is required.
+
 ### Automatic Statistics
 
 Coach Hub calculates statistics from the underlying event history rather than relying on manually entered cumulative totals.
