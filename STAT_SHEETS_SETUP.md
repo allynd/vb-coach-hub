@@ -1,4 +1,4 @@
-# Interactive Stat Sheets (Coach Hub 15.31)
+# Interactive Stat Sheets (Coach Hub 15.32)
 
 The new **Sheets** navigation item is an alternative to Game Day stat buttons and the classic match-correction stepper. It recreates the four sheets in `Stat Template.pdf`: Serving, Serve Receive, Hitting/Setting, and Defense/Blocking.
 
@@ -14,11 +14,14 @@ The new **Sheets** navigation item is an alternative to Game Day stat buttons an
 
 ## Required Supabase setup for collaborative sessions
 
-1. Apply `supabase/migrations/20261023_interactive_stat_sheets.sql` in the **same Supabase project** currently configured for Coach Hub. This is necessary for the new realtime table and row-level security rules. GitHub Pages deployment does not run SQL migrations.
+1. Apply the versioned migrations in order in the **same Supabase project** currently configured for Coach Hub:
+   - `supabase/migrations/20261023110000_interactive_stat_sheets.sql` — creates the operation log and Realtime publication.
+   - `supabase/migrations/20261023110100_harden_sheet_stat_permissions.sql` — removes inherited anonymous/table write privileges and grants only `SELECT`/`INSERT` to authenticated users.
+   If the original stat-sheet SQL was already executed in the Supabase SQL Editor, **do not reset or drop the table**. Run only the hardening migration in SQL Editor; apply the normal CLI migration workflow only after reconciling manually applied migrations with Supabase's migration history. GitHub Pages does not execute SQL migrations.
 2. Each statkeeper signs in from the app. The team owner invites each person through **Team Sharing** as **Coach** or **Scorekeeper** (Viewer may read but cannot add entries).
 3. The owner must have synced the team and match to the cloud. Additional statkeepers accept the invite and restore/download that team to their device before opening Sheets.
 4. All statkeepers open the **same match** and their chosen stat sheet. Divide the groups manually (e.g. serving, passing, hitting/setting, defense/blocking) so different people do not count the same play twice.
-5. The status should read **Live sync active**. Each tap is immediately saved locally, uploaded as an immutable operation, and delivered by Supabase Realtime. A 12-second reconciliation poll covers dropped realtime notifications.
+5. The status should read **Live sync active** only after Supabase confirms the Realtime subscription. While connecting, the app displays **Cloud synced • connecting live updates**. If Realtime disconnects, **Cloud polling active • live connection unavailable** indicates the 12-second fallback is still checking for changes. Each tap is saved locally and queued or uploaded.
 6. If signed out, offline, or not yet added to the cloud team, entries are stored locally and queued. Reopen the same sheet after signing in/reconnecting to send them. Watch for the live sync status before concluding collaboration is active.
 
 ## Important distinctions

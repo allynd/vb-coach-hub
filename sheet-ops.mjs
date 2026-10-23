@@ -1,3 +1,10 @@
+/** Only an acknowledged Supabase subscription is live. */
+export function realtimeStateFor(status) {
+  if (status === 'SUBSCRIBED') return 'live';
+  if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') return 'failed';
+  return 'connecting';
+}
+
 export function applySheetOps(state, rows) {
   state.events = Array.isArray(state.events) ? state.events : [];
   const tombstones = new Set(state.sheetStatTombstones || []);

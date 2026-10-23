@@ -114,3 +114,30 @@ The next cloud phase should add:
 4. Conflict-aware event synchronization.
 5. Realtime updates for multiple coaches.
 6. Professional CSV/report exports.
+
+
+## October 30, 2026 Data API grant changes
+
+Every new `public` table created by a future migration must explicitly declare access for API roles. Do not automatically give `anon` access to team/player/stat tables. Enable RLS and define per-team policies.
+
+```sql
+-- After CREATE TABLE public.your_table (...):
+ALTER TABLE public.your_table ENABLE ROW LEVEL SECURITY;
+REVOKE ALL PRIVILEGES ON TABLE public.your_table FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT ON TABLE public.your_table TO authenticated;
+-- Add UPDATE/DELETE only if the feature requires them, with appropriate RLS policies.
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.your_table TO service_role;
+```
+
+### Interactive stat-sheet migration history
+
+The original `20261023_interactive_stat_sheets.sql` file was renamed to
+`20261023110000_interactive_stat_sheets.sql` to meet the Supabase CLI's
+14-digit timestamp convention. A second migration
+`20261023110100_harden_sheet_stat_permissions.sql` tightens the existing grants.
+
+If the original SQL was pasted into SQL Editor, it may not appear in
+`supabase_migrations.schema_migrations`. Verify the actual database state and
+migration history before using `supabase db push`; do not run `db reset` on
+production or mark unapplied migrations as applied. The hardening SQL is safe to
+run on the existing populated `sheet_stat_ops` table without deleting rows.

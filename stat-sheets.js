@@ -1,6 +1,6 @@
 import {loadState, mutateState} from './db.js';
 import {SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY} from './supabase-config.js';
-import {applySheetOps, fetchSheetOps} from './sheet-ops.mjs';
+import {applySheetOps, fetchSheetOps, realtimeStateFor} from './sheet-ops.mjs';
 
 const $=(s,r=document)=>r.querySelector(s);
 const esc=(v='')=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
@@ -46,7 +46,7 @@ const tabs=[
   ['defense','Defense / Blocking','Defense / Blocking']
 ];
 const roman=['I','II','III','IV','V','VI'];
-let gameId='',setNo=1,tab='serving',syncStatus='Saved locally',isSyncing=false,clientPromise=null,channel=null,channelMatch='',pollTimer=null,renderToken=0,showRoster=false;
+let gameId='',setNo=1,tab='serving',syncStatus='Saved locally',isSyncing=false,clientPromise=null,channel=null,channelMatch='',channelState='idle',pollTimer=null,renderToken=0,showRoster=false;
 const pageName=()=>tabs.find(t=>t[0]===tab)?.[1]||'Serving';
 const fmt=n=>Number.isInteger(n)?String(n):n.toFixed(1);
 const statValue=e=>e.type==='block_error'&&Number.isFinite(e.statValue)?e.statValue:1;
@@ -234,24 +234,47 @@ async function getClient(){
       {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}));
   return clientPromise;
 }
+function setSyncStatus(message){
+  syncStatus=message;
+  const label=$('#sheetSyncStatus');
+  if(label)label.textContent=message;
+}
 function stopSync(){
-  if(channel){getClient().then(c=>c.removeChannel(channel)).catch(()=>{});channel=null;}
+  const previous=channel;
+  channel=null;
   channelMatch='';
+  channelState='idle';
+  if(previous)getClient().then(c=>c.removeChannel(previous)).catch(()=>{});
   if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
 }
 function ensureSubscription(c){
-  if(channelMatch===gameId)return;
+  if(channelMatch===gameId&&(channelState==='connecting'||channelState==='live'))return;
   if(channel)c.removeChannel(channel);
   const subscribedMatch=gameId;
-  channel=c.channel(`sheet-${subscribedMatch}-${deviceId}`)
+  channelMatch=subscribedMatch;
+  channelState='connecting';
+  setSyncStatus('Cloud synced • connecting live updates…');
+  const nextChannel=c.channel(`sheet-${subscribedMatch}-${deviceId}`)
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'sheet_stat_ops',filter:`match_id=eq.${subscribedMatch}`},
       async({new:op})=>{
         if(dialog().open&&gameId===subscribedMatch){
           await mutateState(s=>applySheetOps(s,[op]));
           notify();await render();
         }
-      }).subscribe();
-  channelMatch=subscribedMatch;
+      });
+  channel=nextChannel;
+  nextChannel.subscribe((status,error)=>{
+    if(channel!==nextChannel||channelMatch!==subscribedMatch)return;
+    const state=realtimeStateFor(status);
+    if(state==='live'){
+      channelState='live';
+      setSyncStatus('Live sync active • 12s fallback');
+    }else if(state==='failed'){
+      channelState='failed';
+      setSyncStatus('Cloud polling active • live connection unavailable');
+      if(error)console.warn('Stat sheet Realtime subscription failed:',status,error);
+    }
+  });
   if(!pollTimer)pollTimer=setInterval(()=>{if(dialog().open)syncNow();},12000);
 }
 async function syncNow(force=false,allowClosed=false){
@@ -285,7 +308,6 @@ async function syncNow(force=false,allowClosed=false){
       notify();
     }
     if(dialog().open)ensureSubscription(c);
-    syncStatus='Live sync active • 12s fallback';
   }catch(e){syncStatus='Local saved • sync error: '+(e.message||String(e));}
   finally{isSyncing=false;await render();}
 }
