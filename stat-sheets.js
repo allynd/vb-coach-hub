@@ -160,7 +160,7 @@ async function saveOperation(op){
     return s;
   });
   notify();await render();
-  syncNow();
+  syncNow(false,true);
 }
 async function addStat(button){
   const s=await loadState(),g=s?.games?.find(x=>x.id===gameId);
@@ -243,8 +243,8 @@ function ensureSubscription(c){
   channelMatch=subscribedMatch;
   if(!pollTimer)pollTimer=setInterval(()=>{if(dialog().open)syncNow();},12000);
 }
-async function syncNow(force=false){
-  if(isSyncing||!gameId||!dialog().open)return;
+async function syncNow(force=false,allowClosed=false){
+  if(isSyncing||!gameId||(!dialog().open&&!allowClosed))return;
   if(!navigator.onLine){syncStatus='Offline • queued on device';await render();return;}
   isSyncing=true;
   try{
@@ -273,8 +273,8 @@ async function syncNow(force=false){
       await mutateState(x=>applySheetOps(x,newer));
       notify();
     }
-    ensureSubscription(c);
-    syncStatus='Live sync connected';
+    if(dialog().open)ensureSubscription(c);
+    syncStatus='Live sync active • 12s fallback';
   }catch(e){syncStatus='Local saved • sync error: '+(e.message||String(e));}
   finally{isSyncing=false;await render();}
 }
@@ -288,6 +288,7 @@ async function openStatSheets(requestedGame=null,requestedSet=null){
 }
 async function deleteSheetEvent(event){
   if(!event||event.source!=='stat_sheet')return;
+  gameId=event.gameId;
   await saveOperation(opFor(event,'delete'));
 }
 window.CoachHubStatSheets={open:openStatSheets,deleteEvent:deleteSheetEvent};
