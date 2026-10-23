@@ -29,6 +29,7 @@ const statDefs = {
   serve_error:   { label:'Error', group:'Serve', k:'SE', score:-1, negative:true },
   attack_kill:   { label:'Kill', group:'Attack', k:'K', score: 1, positive:true },
   attack_attempt:{ label:'Attempts', group:'Attack', k:'ATT', score:0 },
+  attack_tip:    { label:'2 Hand Push/Tip', group:'Attack', k:'TIP', score:0 },
   attack_error:  { label:'Error', group:'Attack', k:'E', score:-1, negative:true },
   block_solo:    { label:'Solo', group:'Block', k:'BS', score:1, positive:true },
   block_assist:  { label:'Assist', group:'Block', k:'BA', score:0, positive:true },
@@ -40,6 +41,7 @@ const statDefs = {
   pass_overpass: { label:'Overpass', group:'Pass', k:'OPASS', score:0 },
   set_assist:    { label:'Assist', group:'Set', k:'A', score:0, positive:true },
   set_error:     { label:'Error', group:'Set', k:'BHE', score:-1, negative:true },
+  set_oos:       { label:'OOS (non-setter)', group:'Set', k:'OOS', score:0 },
   dig:           { label:'Dig', group:'Defense', k:'D', score:0, positive:true },
   defense_error: { label:'Error', group:'Defense', k:'DE', score:-1, negative:true },
   team_point:    { label:'Team Point', group:'Score', k:'TP', score:1, positive:true, noPlayer:true },
@@ -51,10 +53,10 @@ const simpleStatTypes = new Set(['serve_ace','serve_in','serve_error','attack_ki
 
 const correctionStatTypes = [
   ['serve_ace','ACE'],['serve_in','Serve In'],['serve_error','Serve Err'],
-  ['attack_kill','Kill'],['attack_attempt','Attempts'],['attack_error','Attack Err'],
+  ['attack_kill','Kill'],['attack_attempt','Attempts'],['attack_error','Attack Err'],['attack_tip','2 Hand Push/Tip'],
   ['block_solo','Solo Block'],['block_assist','Block Assist'],['block_error','Block Err'],
   ['pass_3','Pass 3'],['pass_2','Pass 2'],['pass_1','Pass 1'],['pass_0','Receive Error'],['pass_overpass','Overpass'],
-  ['set_assist','Assist'],['set_error','Set Err / BHE'],
+  ['set_assist','Assist'],['set_error','Set Err / BHE'],['set_oos','OOS (non-setter)'],
   ['dig','Dig'],['defense_error','Def Err']
 ];
 const serviceLabels = ['I','II','III','IV','V','VI'];
@@ -165,7 +167,7 @@ function statTypeCount(events,type,playerId=null){
 function summarizeEvents(events, playerId=null){
   const ev = playerId ? events.filter(e=>e.playerId===playerId) : events.filter(e=>e.playerId);
   const count = type => statTypeCount(ev,type);
-  const K=count('attack_kill'), E=count('attack_error'), attOther=count('attack_attempt');
+  const K=count('attack_kill'), E=count('attack_error'), attOther=count('attack_attempt')+count('attack_tip');
   const ATT=K+E+attOther;
   const ace=count('serve_ace'), sin=count('serve_in'), se=count('serve_error'), SA=ace+sin+se;
   const p3=count('pass_3'),p2=count('pass_2'),p1=count('pass_1'),p0=count('pass_0'), overpass=count('pass_overpass'), PR=p3+p2+p1+p0+overpass;
@@ -823,7 +825,7 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
   $('#modalBody').innerHTML=`<div class="form-grid"><div class="field"><label>Opponent</label><input id="editOpponent" value="${esc(g.opponent||'')}"></div><div class="field"><label>Date</label><input id="editGameDate" type="date" value="${esc(g.date||today())}"></div><div class="field"><label>Match Type</label><select id="editConferenceType"><option value="" ${!g.conferenceType?'selected':''}>Unclassified</option><option value="conference" ${g.conferenceType==='conference'?'selected':''}>Conference</option><option value="nonconference" ${g.conferenceType==='nonconference'?'selected':''}>Non-Conference</option></select></div></div>
   <div class="field"><label>Completed set scores</label><div class="list">${g.sets.map((set,i)=>`<div class="list-item"><strong>Set ${i+1}</strong><div class="set-score-edit"><input inputmode="numeric" data-set-home="${i}" value="${set.home}"><span>–</span><input inputmode="numeric" data-set-away="${i}" value="${set.away}"></div></div>`).join('')||'<div class="muted">No completed sets yet.</div>'}</div></div>
   <hr>
-  <div class="field"><label>Player Stat Corrections</label><div class="form-grid"><div class="field"><label>Player</label><select id="correctionPlayer">${players.map(p=>`<option value="${p.id}" ${p.id===selectedCorrectionPlayer?'selected':''}>${playerLabel(p)}</option>`).join('')}</select></div><div class="field"><label>Set</label><select id="correctionSet">${sets.map(n=>`<option value="${n}" ${n===selectedCorrectionSet?'selected':''}>Set ${n}</option>`).join('')}</select></div></div><div class="stat-correction-grid">${correctionStatTypes.map(([type,label])=>`<div class="stat-correction-item"><span>${esc(label)}</span><div class="stat-correction-stepper"><button type="button" class="btn compact" data-correct-stat="${type}" data-delta="${type==='block_error'?-0.5:-1}">${type==='block_error'?'−0.5':'−'}</button><strong>${correctionCount(type)}</strong><button type="button" class="btn compact primary" data-correct-stat="${type}" data-delta="${type==='block_error'?0.5:1}">${type==='block_error'?'+0.5':'+'}</button></div></div>`).join('')}</div><div class="muted helper">Block Error corrections use 0.5 increments. Corrections change the player's stats only. Saved set scores are not changed. “Attempts” excludes kills and errors. Total Attacks = Kills + Errors + Attempts.</div></div>
+  <div class="button-row"><button type="button" class="btn primary" id="useSheetCorrections">Use Interactive Stat Sheets</button><span class="muted helper">Or continue using the classic step-by-step corrections below.</span></div><div class="field"><label>Player Stat Corrections</label><div class="form-grid"><div class="field"><label>Player</label><select id="correctionPlayer">${players.map(p=>`<option value="${p.id}" ${p.id===selectedCorrectionPlayer?'selected':''}>${playerLabel(p)}</option>`).join('')}</select></div><div class="field"><label>Set</label><select id="correctionSet">${sets.map(n=>`<option value="${n}" ${n===selectedCorrectionSet?'selected':''}>Set ${n}</option>`).join('')}</select></div></div><div class="stat-correction-grid">${correctionStatTypes.map(([type,label])=>`<div class="stat-correction-item"><span>${esc(label)}</span><div class="stat-correction-stepper"><button type="button" class="btn compact" data-correct-stat="${type}" data-delta="${type==='block_error'?-0.5:-1}">${type==='block_error'?'−0.5':'−'}</button><strong>${correctionCount(type)}</strong><button type="button" class="btn compact primary" data-correct-stat="${type}" data-delta="${type==='block_error'?0.5:1}">${type==='block_error'?'+0.5':'+'}</button></div></div>`).join('')}</div><div class="muted helper">Block Error corrections use 0.5 increments. Corrections change the player's stats only. Saved set scores are not changed. “Attempts” excludes kills and errors. Total Attacks = Kills + Errors + Attempts.</div></div>
   <hr>
   <div class="field"><label>Event log</label><div class="timeline correction-list">${ev.map(e=>`<div class="event-row"><span>${esc(eventDescription(e))} <span class="muted">• Set ${e.set}</span></span><button type="button" class="btn compact danger" data-delete-event="${e.id}">Delete</button></div>`).join('')||'<div class="muted">No events recorded.</div>'}</div><div class="muted helper">Deleting an event corrects totals. Player Stat Corrections above are usually faster for simple +/- fixes.</div></div>
   <div class="button-row"><button type="button" class="btn primary" id="saveGameCorrections">Save Corrections</button><button type="button" class="btn danger" id="deleteMatch">Delete Match</button></div>`;
@@ -833,6 +835,11 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
     if(scoreSection)scoreSection.innerHTML=`<label>Final match result</label><div class="notice"><strong>${Number(g.manualSetsWon)||0}-${Number(g.manualSetsLost)||0} sets</strong><div class="muted helper">This is the manually entered match result, not a Set 1 score. Choose Set 1–${(Number(g.manualSetsWon)||0)+(Number(g.manualSetsLost)||0)} below to add stats without changing the result.</div></div>`;
   }
 
+  $('#useSheetCorrections')?.addEventListener('click',()=>{
+    const selectedSet=Number($('#correctionSet')?.value)||selectedCorrectionSet;
+    $('#modal').close();
+    document.dispatchEvent(new CustomEvent('coach:open-stat-sheets',{detail:{gameId:g.id,set:selectedSet}}));
+  });
   $('#correctionPlayer')?.addEventListener('change',e=>openGameEditor(g,e.target.value,$('#correctionSet')?.value));
   $('#correctionSet')?.addEventListener('change',e=>openGameEditor(g,$('#correctionPlayer')?.value,Number(e.target.value)));
 
@@ -913,6 +920,14 @@ window.CoachHubStreamActions={
     await persist();render();return true;
   }
 };
+
+// The sheet interface uses an atomic IndexedDB merge. Refresh this module's
+// in-memory state so subsequent classic stats/exports also see shared events.
+document.addEventListener('coach:sheet-events-updated',async()=>{
+  const updated=await loadState();
+  if(updated)state=migrateState(updated);
+  if(!$('#modal').open)render();
+});
 
 document.addEventListener('coach:edit-match-stats',event=>{
   const game=state.games.find(g=>g.id===event.detail?.gameId);
