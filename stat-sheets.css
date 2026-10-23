@@ -75,3 +75,7 @@
   .sheet-table .sheet-cell{min-width:94px}
   .sheet-notes textarea{min-height:36px;max-height:70px}
 }
+
+.sheet-roster-player{display:flex;flex-direction:column;gap:5px;padding:7px 9px;border:1px solid #becbda;border-radius:8px;background:#fff;color:#263547}
+.sheet-roster-player label{display:flex;gap:5px;align-items:center;cursor:pointer;font-size:12px}
+.sheet-roster-player input:disabled{cursor:not-allowed;opacity:.7}

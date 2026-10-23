@@ -1,7 +1,8 @@
 // Browser export feature. Workbook generation stays on this device, including offline.
 import { correctionSetNumbers } from './match-corrections.mjs';
+import { withPerSetRates } from './player-set-rates.mjs';
 const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fields=[['Kills','K'],['Attack Errors','E'],['Attempts','ATTEMPTS'],['2-Hand Tips','TIPS'],['Total Attacks','ATT'],['Hitting %','HIT','0.000'],['Aces','ACE'],['Serve Errors','SE'],['Foot Faults','FOOTFAULT'],['Serve Attempts','SA'],['Serve In %','SERVE','0.0%'],['Solo Blocks','BS'],['Block Assists','BA'],['Block Errors','BE','#,##0.##'],['Assists','A'],['Digs','D'],['Defensive Errors','DE'],['Set Errors / BHE','BHE'],['Non-Setter OOS','OOS'],['Receive Attempts','PR'],['Receive Errors','RE'],['Overpasses','OVERPASS'],['Pass Average','PASS','0.00'],['Receive Error %','RECEIVE_ERROR','0.0%'],['Receive Success %','RECEIVE_SUCCESS','0.0%'],['Defensive Success %','DEFENSE_SUCCESS','0.0%']];
+const fields=[['Sets Played','SP'],['Kills','K'],['Kills / Set','KPS','0.00'],['Digs / Set','DPS','0.00'],['Attack Errors','E'],['Attempts','ATTEMPTS'],['2-Hand Tips','TIPS'],['Total Attacks','ATT'],['Hitting %','HIT','0.000'],['Aces','ACE'],['Serve Errors','SE'],['Foot Faults','FOOTFAULT'],['Serve Attempts','SA'],['Serve In %','SERVE','0.0%'],['Solo Blocks','BS'],['Block Assists','BA'],['Block Errors','BE','#,##0.##'],['Assists','A'],['Digs','D'],['Defensive Errors','DE'],['Set Errors / BHE','BHE'],['Non-Setter OOS','OOS'],['Receive Attempts','PR'],['Receive Errors','RE'],['Overpasses','OVERPASS'],['Pass Average','PASS','0.00'],['Receive Error %','RECEIVE_ERROR','0.0%'],['Receive Success %','RECEIVE_SUCCESS','0.0%'],['Defensive Success %','DEFENSE_SUCCESS','0.0%']];
 const key=p=>p.personId||p.id;
 export function exportReportData(state,options,summarize){
  const team=state.teams.find(t=>t.id===options.teamId);if(!team)throw Error('Choose a team.');
@@ -23,17 +24,19 @@ export function exportReportData(state,options,summarize){
  }
  if(selected){people.clear();people.set(career?key(selected):selected.id,selected);}
  if(career){const keys=new Set(people.keys());const ids=new Set(state.players.filter(p=>keys.has(key(p))).map(p=>p.id));events=state.events.filter(e=>ids.has(e.playerId));}
- const rows=ev=>[...people.values()].map(p=>{
+ const rows=(ev,scopeGames,onlySet=null)=>[...people.values()].map(p=>{
   const ids=new Set(career?state.players.filter(x=>key(x)===key(p)).map(x=>x.id):[p.id]);
-  return {player:p,stats:summarize(ev.filter(e=>ids.has(e.playerId)))};
+  const stats=summarize(ev.filter(e=>ids.has(e.playerId)));
+  return {player:p,stats:withPerSetRates(stats,scopeGames,ev,ids,onlySet)};
  });
- const section=(name,ev)=>({name,rows:rows(ev),teamStats:summarize(ev),hasTeamTotals:!selected&&!career});
- const sections=[section(options.scope==='match'?'Match Total':options.scope==='set'?`Set ${options.setNo}`:career?'Career Total':'Season Total',events)];
+ const section=(name,ev,scopeGames,onlySet=null)=>({name,rows:rows(ev,scopeGames,onlySet),teamStats:summarize(ev),hasTeamTotals:!selected&&!career});
+ const scopeGames=(options.scope==='match'||options.scope==='set')?[game]:career?state.games:teamGames;
+ const sections=[section(options.scope==='match'?'Match Total':options.scope==='set'?`Set ${options.setNo}`:career?'Career Total':'Season Total',events,scopeGames,options.scope==='set'?Number(options.setNo):null)];
  if(options.scope==='match'){
   const sets=correctionSetNumbers(game,events);
-  for(const n of sets)sections.push(section(`Set ${n}`,events.filter(e=>Number(e.set)===n)));
+  for(const n of sets)sections.push(section(`Set ${n}`,events.filter(e=>Number(e.set)===n),[game],n));
  }
- if(career){for(const t of state.teams){const ids=new Set(state.games.filter(g=>g.teamId===t.id).map(g=>g.id));const ev=events.filter(e=>ids.has(e.gameId)||(e.kind==='season_adjustment'&&e.teamId===t.id));if(ev.length)sections.push(section(`${t.name} ${t.season||''}`,ev));}}
+ if(career){for(const t of state.teams){const games=state.games.filter(g=>g.teamId===t.id);const ids=new Set(games.map(g=>g.id));const ev=events.filter(e=>ids.has(e.gameId)||(e.kind==='season_adjustment'&&e.teamId===t.id));if(ev.length)sections.push(section(`${t.name} ${t.season||''}`,ev,games));}}
  const title=`${team.name} — ${selected?`${selected.firstName} ${selected.lastName||''} — `:''}${options.scope==='match'||options.scope==='set'?`vs ${game.opponent} (${game.date||''})`:career?'Career Stats':`Season ${team.season||''}`}`;
  return {title,sections,filename:`${team.name}-${selected?selected.firstName+'-':''}${options.scope}${options.scope==='set'?'-'+options.setNo:''}.xlsx`};
 }
@@ -55,12 +58,26 @@ export async function writeExcelReport(report){
   data.forEach((values,i)=>{
    const row=ws.getRow(i+6);row.values=values;row.height=24;const total=section.hasTeamTotals&&i===data.length-1;
    row.eachCell({includeEmpty:true},(c,j)=>{c.font={name:'Calibri',size:11,bold:total,color:{argb:total?'FF142B45':'FF263445'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:total?'FFD5ECEE':i%2?'FFF0F4F8':'FFFFFFFF'}};c.alignment={vertical:'middle',horizontal:j>=4?'right':'left'};if(j>=4)c.numFmt=fields[j-4][2]||'#,##0';});
-   // Editable formulas keep efficiencies consistent if counts are corrected in Excel.
-   const r=i+6;const formulas={G:`D${r}+E${r}+F${r}`,H:`IF(G${r}=0,0,(D${r}-E${r})/G${r})`,L:`IF(K${r}=0,0,(K${r}-J${r})/K${r})`,X:`IF(T${r}=0,"",U${r}/T${r})`,Y:`IF(T${r}=0,"",(T${r}-U${r})/T${r})`,Z:`IF(Q${r}+R${r}=0,"",Q${r}/(Q${r}+R${r}))`};
-   for(const [col,formula] of Object.entries(formulas)){const cell=ws.getCell(`${col}${r}`);cell.value={formula,result:cell.value??''};}
+   // Derive formula columns by stat keys, not fixed Excel letters: adding
+   // columns must never silently corrupt hitting, serving or defensive rates.
+   const r=i+6;
+   const ref=k=>`${ws.getColumn(4+fields.findIndex(f=>f[1]===k)).letter}${r}`;
+   const formulas={
+     ATT:`${ref('K')}+${ref('E')}+${ref('ATTEMPTS')}`,
+     HIT:`IF(${ref('ATT')}=0,0,(${ref('K')}-${ref('E')})/${ref('ATT')})`,
+     SERVE:`IF(${ref('SA')}=0,0,(${ref('SA')}-${ref('SE')})/${ref('SA')})`,
+     KPS:`IF(${ref('SP')}=0,"",${ref('K')}/${ref('SP')})`,
+     DPS:`IF(${ref('SP')}=0,"",${ref('D')}/${ref('SP')})`,
+     RECEIVE_ERROR:`IF(${ref('PR')}=0,"",${ref('RE')}/${ref('PR')})`,
+     RECEIVE_SUCCESS:`IF(${ref('PR')}=0,"",(${ref('PR')}-${ref('RE')})/${ref('PR')})`,
+     DEFENSE_SUCCESS:`IF(${ref('D')}+${ref('DE')}=0,"",${ref('D')}/(${ref('D')}+${ref('DE')}))`
+   };
+   for(const [key,formula] of Object.entries(formulas)){
+     const cell=ws.getCell(ref(key));cell.value={formula,result:cell.value??''};
+   }
   });
   ws.autoFilter={from:'A5',to:`${ws.getRow(5).getCell(3+fields.length).address.replace(/\d+$/,'')}${5+section.rows.length}`};
-  const note=ws.getRow(8+data.length);note.getCell(1).value='Attempts exclude kills and attack errors; two-hand tips are included in non-kill attempts. Overpasses count as receptions, not receive errors. No recorded opportunities = blank rate. Career totals use linked player identities.';ws.mergeCells(note.number,1,note.number,8);note.height=46;note.getCell(1).alignment={wrapText:true};note.getCell(1).font={size:10,color:{argb:'FF596A7B'}};
+  const note=ws.getRow(8+data.length);note.getCell(1).value='Attempts exclude kills and attack errors; two-hand tips are included in non-kill attempts. Overpasses count as 1-point receptions (not receive errors). Kills/Set and Digs/Set use documented player set appearances. No recorded opportunities = blank rate. Career totals use linked player identities.';ws.mergeCells(note.number,1,note.number,8);note.height=46;note.getCell(1).alignment={wrapText:true};note.getCell(1).font={size:10,color:{argb:'FF596A7B'}};
  }
  const bytes=await wb.xlsx.writeBuffer();return new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }

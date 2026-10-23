@@ -1,6 +1,7 @@
 import {loadState, mutateState} from './db.js';
 import {SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY} from './supabase-config.js';
 import {applySheetOps, fetchSheetOps, realtimeStateFor} from './sheet-ops.mjs';
+import {playedSetsForPlayer} from './player-set-rates.mjs';
 
 const $=(s,r=document)=>r.querySelector(s);
 const esc=(v='')=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
@@ -146,7 +147,7 @@ async function render(){
     <button class="btn compact sheet-undo" data-action="undo" ${latest?'':'disabled'}>↶ Undo my last stat</button>
   </div>
   <div class="sheet-match-info"><strong>${esc(team?.name||'Team')} vs ${gName}</strong><span>${g.manualRecord?'Manual result saved':g.complete?'Completed match':'Live match'} • Sheet entries do not change the scoreboard • ${g.date||''}</span></div>
-  ${showRoster?`<div class="sheet-roster-picker"><div class="sheet-roster-head"><strong>Show players</strong><span>Hiding a player only changes this device’s sheet view.</span><button class="btn compact" data-action="show-all">Show all</button></div><div class="sheet-roster-options">${all.map(p=>`<label><input type="checkbox" data-show-player="${esc(p.id)}" ${hidden.has(p.id)?'':'checked'}>${esc(playerLabel(p))}</label>`).join('')}</div></div>`:''}
+  ${showRoster?`<div class="sheet-roster-picker"><div class="sheet-roster-head"><strong>Player visibility & set participation</strong><span>Use “Played Set” for film stats when a player took the court but has no recorded stat. Hiding only changes your view.</span><button class="btn compact" data-action="show-all">Show all</button></div><div class="sheet-roster-options">${all.map(p=>{const inferred=playedSetsForPlayer([g],events.filter(e=>e.type!=='set_appearance'),[p.id],setNo).size>0;const marked=events.some(e=>e.type==='set_appearance'&&e.playerId===p.id&&Number(e.set)===setNo);return `<div class="sheet-roster-player"><strong>${esc(playerLabel(p))}</strong><label><input type="checkbox" data-show-player="${esc(p.id)}" ${hidden.has(p.id)?'':'checked'}>Show</label><label title="${inferred?'Participation already recorded by a lineup or other stat':'Manually record that this player took the court in the selected set'}"><input type="checkbox" data-played-player="${esc(p.id)}" ${inferred||marked?'checked':''} ${inferred?'disabled':''}>Played Set ${setNo}</label></div>`;}).join('')}</div></div>`:''}
   <div class="sheet-tabs" role="tablist" aria-label="Stat sheet pages">${tabs.map(([id,name])=>`<button type="button" role="tab" aria-selected="${id===tab}" data-action="tab" data-tab="${id}" class="${id===tab?'active':''}">${name}</button>`).join('')}</div>
   <div class="sheet-hint">Tap a player’s stat box to add ${tab==='defense'?'0.5 for block errors or 1 for other stats':'one tally'}. Landscape orientation gives more room.</div>
   <div id="sheetScroll" class="sheet-scroll"><table class="sheet-table ${tab}">
@@ -194,6 +195,20 @@ async function addOpp(button){
   if(button.dataset.rotation)event.rotation=Number(button.dataset.rotation);
   await saveOperation(opFor(event,'add'));
 }
+async function markPlayedSet(playerId,checked){
+  const s=await loadState(),g=s?.games?.find(x=>x.id===gameId);
+  if(!g||!rosterFor(s,g).some(p=>p.id===playerId))return;
+  const existing=(s.events||[]).filter(e=>e.gameId===g.id&&e.playerId===playerId
+    &&Number(e.set)===setNo&&e.type==='set_appearance');
+  if(checked && !existing.length){
+    const event={id:`sheet_${uuid()}`,kind:'stat',source:'stat_sheet',correction:true,
+      teamId:g.teamId,gameId:g.id,playerId,type:'set_appearance',set:setNo,
+      scoreImpact:0,sheetDeviceId:deviceId,createdAt:new Date().toISOString()};
+    await saveOperation(opFor(event,'add'));
+  }else if(!checked){
+    for(const event of existing)await saveOperation(opFor(event,'delete'));
+  }
+}
 async function undo(){
   const s=await loadState();
   const e=(s?.events||[]).filter(e=>e.gameId===gameId
@@ -216,6 +231,10 @@ function handleChange(ev){
   const t=ev.target;
   if(t.id==='sheetGame'){gameId=t.value;setNo=1;stopSync();render();syncNow();return;}
   if(t.id==='sheetSet'){setNo=Number(t.value)||1;render();return;}
+  if(t.matches('[data-played-player]')){
+    markPlayedSet(t.dataset.playedPlayer,t.checked).catch(showError);
+    return;
+  }
   if(t.matches('[data-show-player]')){
     const hidden=hiddenFor(gameId);
     if(t.checked)hidden.delete(t.dataset.showPlayer);else hidden.add(t.dataset.showPlayer);
