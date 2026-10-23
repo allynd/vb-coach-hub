@@ -121,7 +121,9 @@ A setting/ball-handling error is recorded as a player statistic only and does **
 
 ### Player Per-Set Stats and Overpasses
 
-Each player's **Kills/Set (K/S)** and **Digs/Set (D/S)** are available at match, season, and linked-career levels, including player profiles, match/season tables, shared summaries, CSV and Excel exports. The denominator is **sets the player participated in**, not all of the team's sets: a set is counted once when it has a recorded player stat, a submitted lineup or substitution for a set that was actually played, or an explicit **Played Set** marker.
+Each player's **Kills/Set (K/S)**, **Digs/Set (D/S)**, and **Blocks/Set (B/S)** are available at match, season, and linked-career levels, including player profiles, match/season tables, shared summaries, CSV and Excel exports. The denominator is **sets the player participated in**, not all of the team's sets: a set is counted once when it has a recorded player stat, a submitted lineup or substitution for a set that was actually played, or an explicit **Played Set** marker.
+
+Individual **Blocks/Set = (solo blocks + block assists) / sets played**. Both solo blocks and assisted blocks count as one individual block each; block errors are excluded. Team blocks are calculated differently: solo blocks + half of block assists.
 
 For older, film-entered, and manual-result matches, open **Sheets → Players → Played Set** to include a player who participated in that set without any recorded stat. Merely appearing on the roster, or being named a libero without entering, does not count as playing. When participation is unknown, K/S and D/S display **—** instead of guessing. Season-only adjustments change totals, but do not themselves establish a set appearance.
 
