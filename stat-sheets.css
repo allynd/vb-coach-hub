@@ -44,6 +44,8 @@
 .sheet-table .sheet-cell strong{font-size:18px;font-variant-numeric:tabular-nums}
 .sheet-empty{font-size:16px;color:#aeb5bd;font-weight:400}
 .sheet-tallies{color:#366c94;font-size:15px;letter-spacing:-2px}
+.sheet-table .sheet-opp-cell{background:#dce5ed!important;vertical-align:top}
+.sheet-table .sheet-opp-cell .sheet-cell{min-height:135px;align-items:flex-start;padding-top:20px}
 .sheet-team-row td,.sheet-team-row th{background:#dee6ee!important}
 .sheet-team-row th{font-size:12px;padding:4px;white-space:nowrap}
 .sheet-team-note{font-size:12px;white-space:normal;padding:7px!important}
