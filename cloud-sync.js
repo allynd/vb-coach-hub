@@ -1,5 +1,6 @@
 import { loadState, saveState } from './db.js';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './supabase-config.js';
+import { applySheetOps, fetchSheetOps } from './sheet-ops.mjs';
 
 const MEDIA_BUCKET='team-media';
 let clientPromise=null;
@@ -206,6 +207,15 @@ export async function syncFullActiveTeam(){
     if(!user) throw new Error('Sign in first.');
 
     const {existing,role}=await ensureCloudTeam(supabase,team,user.id);
+    // Merge the append-only collaboration log before any full-team snapshot upload.
+    // Unlike a last-writer-wins backup this preserves statkeepers' independent taps.
+    try {
+      applySheetOps(state,await fetchSheetOps(supabase,team.id));
+      await saveState(state);
+    } catch(error) {
+      if(!/sheet_stat_ops|relation .* does not exist|Could not find the table/i.test(error.message||''))throw error;
+      console.warn('Interactive stat sheet migration is not applied yet.',error);
+    }
 
     let logoPath=existing?.logo_path||null;
     if(team.logo) logoPath=await uploadImage(supabase,team.logo,`${team.id}/team-logo`);
@@ -389,6 +399,14 @@ export async function restoreCloudTeam(teamId){
     state.players.push(...restored.players);
     state.games.push(...restored.games);
     state.events.push(...restored.events);
+    // Snapshots can be older than another user's film review; replay the durable
+    // sheet operation log (including Undo tombstones) after restoring a team.
+    try {
+      applySheetOps(state,await fetchSheetOps(supabase,teamId));
+    } catch(error) {
+      if(!/sheet_stat_ops|relation .* does not exist|Could not find the table/i.test(error.message||''))throw error;
+      console.warn('Sheet event log unavailable during restore.',error);
+    }
     state.activeTeamId=teamId;
     if(state.activeGameId && !state.games.some(g=>g.id===state.activeGameId&&!g.complete)) state.activeGameId=null;
     await saveState(state);
