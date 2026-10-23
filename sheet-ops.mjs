@@ -4,11 +4,16 @@ export function applySheetOps(state, rows) {
   for (const op of rows || []) if (op.action === 'delete' && op.event_id) tombstones.add(op.event_id);
   const known = new Set(state.events.map(e => e.id));
   for (const op of rows || []) {
-    if (op.action !== 'add' || !op.event_id || tombstones.has(op.event_id) || known.has(op.event_id)) continue;
+    if (op.action !== 'add' || !op.event_id || tombstones.has(op.event_id)) continue;
     const event = op.payload?.event;
     if (!event || event.id !== op.event_id || event.gameId !== op.match_id || event.teamId !== op.team_id) continue;
-    state.events.push(event);
-    known.add(event.id);
+    if (known.has(event.id)) {
+      const at = state.events.findIndex(e => e.id === event.id);
+      if (at >= 0) state.events[at] = {...state.events[at], ...event};
+    } else {
+      state.events.push(event);
+      known.add(event.id);
+    }
   }
   if (tombstones.size) state.events = state.events.filter(e => !tombstones.has(e.id));
   state.sheetStatTombstones = [...tombstones];
