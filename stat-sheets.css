@@ -1,3 +1,4 @@
+.bottom-nav{grid-template-columns:repeat(8,minmax(70px,1fr))}
 .sheet-dialog{box-sizing:border-box;position:fixed;inset:0;width:calc(100vw - 12px);height:calc(100dvh - 12px);max-width:none;max-height:none;margin:auto;padding:0;border:1px solid #35445e;border-radius:13px;background:#f7f8fa;color:#182333;box-shadow:0 24px 80px #0009}
 .sheet-dialog::backdrop{background:rgba(2,8,22,.78)}
 #statSheetContent{display:flex;flex-direction:column;min-height:100%;height:100%;overflow:hidden}
@@ -16,7 +17,7 @@
 .sheet-match-info{padding:6px 15px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;background:white;border-bottom:1px solid #cad0d8}
 .sheet-match-info span{color:#64748b}
 .sheet-tabs{display:flex;overflow-x:auto;gap:0;border-bottom:1px solid #9eabb9;background:#d5dce6;flex-shrink:0}
-.sheet-tabs button{flex:1 0 max-content;border:0;border-right:1px solid #a9b6c8;background:transparent;color:#233347;padding:11px 13px;font:700 13px inherit;cursor:pointer}
+.sheet-tabs button{flex:1 0 max-content;border:0;border-right:1px solid #a9b6c8;background:transparent;color:#233347;padding:11px 13px;font-weight:700;font-size:13px;font-family:inherit;cursor:pointer}
 .sheet-tabs button.active{background:#fff;border-bottom:4px solid #2765a2;padding-bottom:7px;color:#163e6b}
 .sheet-hint{font-size:12px;background:#fff8dd;padding:7px 15px;color:#655622}
 .sheet-scroll{flex:1;overflow:auto;background:#fff;overscroll-behavior:contain;min-height:140px}
