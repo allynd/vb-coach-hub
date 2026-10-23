@@ -167,9 +167,10 @@ async function openSummary(gameId){
     </div>
     <div class="card" style="margin-top:12px"><div class="muted">Where</div><strong>${esc(g.location||'Not entered')}</strong></div>
     <p class="muted">You can add or correct player and opponent stats for each set without changing the saved match result.</p>
-    <div class="button-row"><button type="button" class="btn primary" id="addManualStats">Add / Correct Stats</button><button type="button" class="btn" id="editManualResult">Edit Result</button></div>`;
+    <div class="button-row"><button type="button" class="btn primary" id="addManualStats">Add / Correct Stats (Classic)</button><button type="button" class="btn" id="addManualSheets">Interactive Stat Sheets</button><button type="button" class="btn" id="editManualResult">Edit Result</button></div>`;
   $('#editManualResult').onclick=()=>{dialog.close();openEditor(gameId);};
   $('#addManualStats').onclick=()=>{dialog.close();document.dispatchEvent(new CustomEvent('coach:edit-match-stats',{detail:{gameId}}));};
+  $('#addManualSheets').onclick=()=>{dialog.close();document.dispatchEvent(new CustomEvent('coach:open-stat-sheets',{detail:{gameId,set:1}}));};
   dialog.showModal();
 }
 
