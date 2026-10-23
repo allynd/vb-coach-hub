@@ -859,6 +859,7 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
     const playerId=$('#correctionPlayer')?.value||selectedCorrectionPlayer;
     const setNo=Number($('#correctionSet')?.value)||selectedCorrectionSet;
     if(!playerId||!statDefs[type])return;
+    let deletedSheetEvent=null;
     if(delta>0){
       if((g.streamOnly||g.manualRecord)&&!gameRosterIds(g).includes(playerId)){
         const p=playerById(playerId);
@@ -869,16 +870,30 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
       }
       state.events.push({id:uid('event'),kind:'stat',gameId:g.id,teamId:g.teamId,playerId,type,set:setNo,scoreImpact:0,correction:true,...(type==='block_error'?{statValue:delta}:{}),createdAt:new Date().toISOString()});
     }else if(type==='block_error'){
-      if(!decrementBlockError(state.events,g.id,playerId,setNo))return;
+      const idx=state.events.findLastIndex(e=>e.gameId===g.id&&e.playerId===playerId&&Number(e.set)===setNo&&e.type===type&&statEventValue(e)>0);
+      if(idx<0)return;
+      if(state.events[idx].source==='stat_sheet') deletedSheetEvent=state.events.splice(idx,1)[0];
+      else if(!decrementBlockError(state.events,g.id,playerId,setNo))return;
     }else{
       const idx=[...state.events].map((e,i)=>({e,i})).reverse().find(x=>x.e.gameId===g.id&&x.e.playerId===playerId&&Number(x.e.set)===setNo&&x.e.type===type)?.i;
       if(idx===undefined)return;
+      deletedSheetEvent=state.events[idx].source==='stat_sheet'?state.events[idx]:null;
       state.events.splice(idx,1);
     }
-    await persist();openGameEditor(g,playerId,setNo);
+    await persist();
+    if(deletedSheetEvent)await window.CoachHubStatSheets?.deleteEvent(deletedSheetEvent);
+    openGameEditor(g,playerId,setNo);
   });
 
-  $$('[data-delete-event]').forEach(btn=>btn.onclick=async()=>{if(!confirm('Delete this event?'))return;state.events=state.events.filter(e=>e.id!==btn.dataset.deleteEvent);for(const l of Object.values(g.setLineups||{}))l.substitutions=(l.substitutions||[]).filter(s=>s.id!==btn.dataset.deleteEvent);await persist();openGameEditor(g,selectedCorrectionPlayer,selectedCorrectionSet);});
+  $('[data-delete-event]').forEach(btn=>btn.onclick=async()=>{
+    if(!confirm('Delete this event?'))return;
+    const deleted=state.events.find(e=>e.id===btn.dataset.deleteEvent);
+    state.events=state.events.filter(e=>e.id!==btn.dataset.deleteEvent);
+    for(const l of Object.values(g.setLineups||{}))l.substitutions=(l.substitutions||[]).filter(s=>s.id!==btn.dataset.deleteEvent);
+    await persist();
+    if(deleted?.source==='stat_sheet')await window.CoachHubStatSheets?.deleteEvent(deleted);
+    openGameEditor(g,selectedCorrectionPlayer,selectedCorrectionSet);
+  });
   $('#saveGameCorrections').onclick=async()=>{g.opponent=$('#editOpponent').value.trim()||'Opponent';g.date=$('#editGameDate').value||today();g.conferenceType=$('#editConferenceType')?.value||'';$$('[data-set-home]').forEach(input=>{const i=+input.dataset.setHome;g.sets[i].home=Math.max(0,+input.value||0);});$$('[data-set-away]').forEach(input=>{const i=+input.dataset.setAway;g.sets[i].away=Math.max(0,+input.value||0);});await persist();$('#modal').close();showGameSummary(g.id);render();};
   $('#deleteMatch').onclick=async()=>{if(!confirm(`Permanently delete the match vs ${g.opponent} and all of its stats?`))return;state.events=state.events.filter(e=>e.gameId!==g.id);state.games=state.games.filter(x=>x.id!==g.id);if(state.activeGameId===g.id)state.activeGameId=null;await persist();$('#modal').close();setView('games');};
   if(!$('#modal').open)$('#modal').showModal();
