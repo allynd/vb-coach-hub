@@ -43,6 +43,7 @@ const statDefs = {
   set_assist:    { label:'Assist', group:'Set', k:'A', score:0, positive:true },
   set_error:     { label:'Error', group:'Set', k:'BHE', score:-1, negative:true },
   set_oos:       { label:'OOS (non-setter)', group:'Set', k:'OOS', score:0 },
+  set_appearance:{ label:'Played Set', group:'Participation', k:'SP', score:0 },
   dig:           { label:'Dig', group:'Defense', k:'D', score:0, positive:true },
   defense_error: { label:'Error', group:'Defense', k:'DE', score:-1, negative:true },
   team_point:    { label:'Team Point', group:'Score', k:'TP', score:1, positive:true, noPlayer:true },
