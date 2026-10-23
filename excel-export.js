@@ -59,7 +59,7 @@ export async function writeExcelReport(report){
    const r=i+6;const formulas={G:`D${r}+E${r}+F${r}`,H:`IF(G${r}=0,0,(D${r}-E${r})/G${r})`,L:`IF(K${r}=0,0,(K${r}-J${r})/K${r})`,X:`IF(T${r}=0,"",U${r}/T${r})`,Y:`IF(T${r}=0,"",(T${r}-U${r})/T${r})`,Z:`IF(Q${r}+R${r}=0,"",Q${r}/(Q${r}+R${r}))`};
    for(const [col,formula] of Object.entries(formulas)){const cell=ws.getCell(`${col}${r}`);cell.value={formula,result:cell.value??''};}
   });
-  ws.autoFilter={from:'A5',to:`${ws.getRow(5).getCell(3+fields.length).address.replace(/\\d+$/,'')}${5+section.rows.length}`};
+  ws.autoFilter={from:'A5',to:`${ws.getRow(5).getCell(3+fields.length).address.replace(/\d+$/,'')}${5+section.rows.length}`};
   const note=ws.getRow(8+data.length);note.getCell(1).value='Attempts exclude kills and attack errors; two-hand tips are included in non-kill attempts. Overpasses count as receptions, not receive errors. No recorded opportunities = blank rate. Career totals use linked player identities.';ws.mergeCells(note.number,1,note.number,8);note.height=46;note.getCell(1).alignment={wrapText:true};note.getCell(1).font={size:10,color:{argb:'FF596A7B'}};
  }
  const bytes=await wb.xlsx.writeBuffer();return new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
