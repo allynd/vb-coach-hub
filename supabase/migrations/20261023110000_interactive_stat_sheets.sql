@@ -34,7 +34,11 @@ with check (
       and m.role in ('owner','coach','scorekeeper')
   )
 );
-grant select, insert on public.sheet_stat_ops to authenticated;
+-- Explicit API grants on creation (including projects with the October 30 defaults).
+-- Retain RLS; never expose team data to anonymous visitors.
+revoke all privileges on table public.sheet_stat_ops from public, anon, authenticated;
+grant select, insert on table public.sheet_stat_ops to authenticated;
+grant select, insert, update, delete on table public.sheet_stat_ops to service_role;
 do $$
 begin
   if not exists (
