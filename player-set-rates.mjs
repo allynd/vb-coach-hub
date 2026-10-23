@@ -1,4 +1,4 @@
-// Player participation for kills/digs per set across match, season, career.
+// Player participation for kills/digs/individual blocks per set across match, season, career.
 // A roster or a designated libero alone is NOT proof a player took the court.
 // Count distinct (match, set) combinations supported by a player stat/appearance
 // event, a completed/started lineup, or a recorded substitution.
@@ -64,7 +64,8 @@ export function withPerSetRates(stats,games,events,playerIds,onlySet=null){
   return {
     ...stats,SP,
     KPS:SP?(Number(stats.K)||0)/SP:null,
-    DPS:SP?(Number(stats.D)||0)/SP:null
+    DPS:SP?(Number(stats.D)||0)/SP:null,
+    BPS:SP?((Number(stats.BS)||0)+(Number(stats.BA)||0))/SP:null
   };
 }
 export function formatPerSetRate(value){
