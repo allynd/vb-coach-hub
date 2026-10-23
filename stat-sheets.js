@@ -95,7 +95,7 @@ function dialog(){
   document.body.appendChild(d);
   d.addEventListener('click',handleClick);
   d.addEventListener('change',handleChange);
-  d.addEventListener('focusout',handleNotes);
+  d.addEventListener('input',handleNotes);
   d.addEventListener('close',()=>{stopSync();showRoster=false;});
   return d;
 }
@@ -120,7 +120,18 @@ async function render(){
   const rotationHead=tab==='serving'?`<th colspan="6" class="sheet-group opponent">Opp. Missed Serve Receive/OOS Force</th>`:'';
   const oppSetHead=tab==='receive'?'<th class="sheet-group opponent" colspan="5">Opp. Missed Serve</th>':'';
   const blankHead=tab==='serving'?roman.map(x=>`<th>${x}</th>`).join(''):tab==='receive'?[1,2,3,4,5].map(x=>`<th>Set ${x}</th>`).join(''):'';
-  const playerRows=players.map(p=>`<tr><th class="sheet-jersey">${esc(p.jersey||'—')}</th><th class="sheet-name">${esc([p.firstName,p.lastName].filter(Boolean).join(' ')||'Player')}</th>${c.map(col=>`<td><button type="button" class="sheet-cell" data-action="stat" data-player="${esc(p.id)}" data-type="${col.type}" data-detail="${col.detail||''}" data-step="${col.step||1}" aria-label="${esc(playerLabel(p))}: ${esc(col.label)}">${tally(amount(events,col,p.id,setNo))}</button></td>`).join('')}${tab==='serving'?'<td class="sheet-blank" colspan="6"></td>':tab==='receive'?'<td class="sheet-blank" colspan="5"></td>':''}</tr>`).join('');
+  // The template's opponent counters occupy the upper-right cells of the sheet,
+  // rather than being pushed below the roster rows.
+  function sidebarCells(index){
+    const n=tab==='serving'?6:tab==='receive'?5:0;
+    if(!n)return '';
+    const span=Math.min(3,players.length);
+    if(index>0&&index<span)return '';
+    if(index>=span)return `<td colspan="${n}" class="sheet-blank"></td>`;
+    if(tab==='serving')return roman.map((r,i)=>`<td class="sheet-opp-cell" rowspan="${span}"><button type="button" class="sheet-cell" data-action="opp" data-opp-set="${setNo}" data-rotation="${i+1}" aria-label="Opponent missed serve, rotation ${r}">${tally(events.filter(e=>e.type==='opp_serve_error'&&Number(e.set)===setNo&&e.rotation===i+1).length)}</button></td>`).join('');
+    return [1,2,3,4,5].map(n=>`<td class="sheet-opp-cell" rowspan="${span}"><button type="button" class="sheet-cell" data-action="opp" data-opp-set="${n}" data-rotation="" aria-label="Opponent missed serve, set ${n}">${tally(events.filter(e=>e.type==='opp_serve_error'&&Number(e.set)===n).length)}</button></td>`).join('');
+  }
+  const playerRows=players.map((p,rowIndex)=>`<tr><th class="sheet-jersey">${esc(p.jersey||'—')}</th><th class="sheet-name">${esc([p.firstName,p.lastName].filter(Boolean).join(' ')||'Player')}</th>${c.map(col=>`<td><button type="button" class="sheet-cell" data-action="stat" data-player="${esc(p.id)}" data-type="${col.type}" data-detail="${col.detail||''}" data-step="${col.step||1}" aria-label="${esc(playerLabel(p))}: ${esc(col.label)}">${tally(amount(events,col,p.id,setNo))}</button></td>`).join('')}${sidebarCells(rowIndex)}</tr>`).join('');
   const teamRow=tab==='serving'?`<tr class="sheet-team-row"><th colspan="2">Team / Rotation</th><td colspan="${c.length}" class="sheet-team-note">Opponent missed serves by rotation • Set ${setNo}</td>${roman.map((r,i)=>`<td><button type="button" class="sheet-cell" data-action="opp" data-opp-set="${setNo}" data-rotation="${i+1}" aria-label="Opponent missed serve, rotation ${r}">${tally(events.filter(e=>e.type==='opp_serve_error'&&Number(e.set)===setNo&&e.rotation===i+1).length)}</button></td>`).join('')}</tr>`:tab==='receive'?`<tr class="sheet-team-row"><th colspan="2">Team / All Sets</th><td colspan="${c.length}" class="sheet-team-note">Opponent missed serves</td>${[1,2,3,4,5].map(n=>`<td><button type="button" class="sheet-cell" data-action="opp" data-opp-set="${n}" data-rotation="" aria-label="Opponent missed serve, set ${n}">${tally(events.filter(e=>e.type==='opp_serve_error'&&Number(e.set)===n).length)}</button></td>`).join('')}</tr>`:'';
   const notesKey=`${g.id}:${setNo}:${tab}`;
   const notes=s.sheetNotes?.[notesKey]||'';
@@ -141,7 +152,7 @@ async function render(){
   <div id="sheetScroll" class="sheet-scroll"><table class="sheet-table ${tab}">
     <thead><tr><th rowspan="2" class="sheet-jersey">#</th><th rowspan="2" class="sheet-name">Name</th>${groupHeads}${rotationHead}${oppSetHead}</tr>
     <tr>${c.map(col=>`<th class="sheet-subhead ${col.family||tab}">${esc(col.label)}</th>`).join('')}${blankHead}</tr></thead>
-    <tbody>${playerRows||`<tr><td colspan="${c.length+2+(blankHead?tab==='serving'?6:5:0)}" class="sheet-empty-state">All players are hidden. Tap Players to show them.</td></tr>`}${teamRow}</tbody>
+    <tbody>${playerRows||`<tr><td colspan="${c.length+2+(blankHead?tab==='serving'?6:5:0)}" class="sheet-empty-state">All players are hidden. Tap Players to show them.</td></tr>`}${players.length?'':teamRow}</tbody>
   </table></div>
   <div class="sheet-notes"><label for="sheetNotes">Additional Notes • ${pageName()} / Set ${setNo}</label><textarea id="sheetNotes" rows="3" placeholder="Optional notes">${esc(notes)}</textarea></div>
   <div class="sheet-footer">Each cell records a separate stat event. Undo removes only your own most recent sheet entry. Other statkeepers’ entries appear after sync.</div>`;
