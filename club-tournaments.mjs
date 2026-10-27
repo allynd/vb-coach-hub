@@ -46,7 +46,10 @@ export function groupClubTournaments(games) {
   for(const game of games||[]){
     const key=tournamentKey(game.eventName);
     if(!grouped.has(key))grouped.set(key,{key,name:tournamentName(game),games:[]});
-    grouped.get(key).games.push(game);
+    const group=grouped.get(key);
+    const supplied=String(game.eventName||'').trim();
+    if(supplied && !/[A-Z]/.test(group.name) && /[A-Z]/.test(supplied))group.name=supplied;
+    group.games.push(game);
   }
   const result=[...grouped.values()];
   for(const group of result) {
