@@ -1,6 +1,7 @@
 import { openExcelExport } from './excel-export.js';
 import { withPerSetRates, formatPerSetRate } from './player-set-rates.mjs';
 import { loadState, saveState } from './db.js';
+import { refreshActiveTeamFromCloud } from './cloud-sync.js';
 import { correctionSetNumbers, opponentMissedServeCount, changeOpponentMissedServes } from './match-corrections.mjs';
 
 const $ = (s, root=document) => root.querySelector(s);
@@ -22,6 +23,10 @@ const DEFAULT = {
 
 let state = structuredClone(DEFAULT);
 let view = 'dashboard';
+let teamRefreshBusy = false;
+let teamRefreshMessage = '';
+let teamRefreshFailed = false;
+let teamRefreshTeamId = null;
 let selectedPlayerId = null;
 
 const statDefs = {
@@ -258,14 +263,40 @@ function renderDashboard(){
           </div>
         </div>
         <div class="big-actions"><button class="btn primary big-action" id="dashNewMatch"><strong>🏐 New Match</strong><span>Set lineup, then track</span></button><button class="btn big-action" id="dashRoster"><strong>👥 Roster</strong><span>${teamPlayers().length} active players</span></button></div>
+        <button type="button" class="btn team-update-button" id="dashUpdateTeam" ${teamRefreshBusy?'disabled':''}><strong>${teamRefreshBusy?'↻ Updating Team…':'↻ Update Team'}</strong><span>Refresh latest synced stats and matches</span></button>
+        ${teamRefreshMessage && teamRefreshTeamId===t.id ? `<div role="status" class="team-update-status ${teamRefreshFailed?'team-update-error':''}">${esc(teamRefreshMessage)}</div>` : ''}
       </div>
       <div class="card"><h3>Season Team Stats</h3><div class="stat-strip"><div class="metric"><span class="muted">Hit %</span><b>${fmtPct(ts.HIT)}</b></div><div class="metric"><span class="muted">Aces</span><b>${ts.ACE}</b></div><div class="metric"><span class="muted">Digs</span><b>${ts.D}</b></div><div class="metric"><span class="muted">Pass Avg</span><b>${ts.PASS.toFixed(2)}</b></div></div>${latest?`<hr><div class="muted">Latest match</div><h3>${esc(latest.opponent||'Opponent')} • ${latest.complete?'Final':'In progress'}</h3><button class="btn compact" id="openLatest">${latest.complete?'View stats':'Resume match'}</button>`:''}</div>
     </section>
     <section class="grid two" style="margin-top:14px"><div class="card"><h3>Season Leaders</h3><div class="list">${leaders.map(([label,x])=>x?`<div class="list-item"><span>${label}</span><strong>${esc(x.p.firstName)} ${label==='Kills'?x.s.K:label==='Aces'?x.s.ACE:label==='Assists'?x.s.A:x.s.D}</strong></div>`:'').join('')||'<div class="muted">Stats will appear after your first match.</div>'}</div></div><div class="card"><h3>Recent Matches</h3><div class="list">${games.slice(0,5).map(g=>matchListItem(g)).join('')||'<div class="muted">No matches yet.</div>'}</div></div></section>`;
   $('#dashNewMatch').onclick=openNewGame;
   $('#dashRoster').onclick=()=>setView('roster');
+  $('#dashUpdateTeam')?.addEventListener('click',updateTeamFromDashboard);
   $('#openLatest')?.addEventListener('click',()=>{ if(!latest.complete){state.activeGameId=latest.id;persist();setView('gameday');} else showGameSummary(latest.id); });
   $$('[data-game]').forEach(el=>el.onclick=()=>showGameSummary(el.dataset.game));
+}
+
+
+async function updateTeamFromDashboard(){
+  if(teamRefreshBusy)return;
+  teamRefreshTeamId=state.activeTeamId;
+  teamRefreshBusy=true;
+  teamRefreshFailed=false;
+  teamRefreshMessage='Checking latest synced team data…';
+  render();
+  try {
+    const result=await refreshActiveTeamFromCloud(teamRefreshTeamId);
+    const refreshed=await loadState();
+    if(refreshed)state=migrateState(refreshed);
+    teamRefreshMessage=result.message;
+    teamRefreshFailed=false;
+  } catch(error) {
+    teamRefreshMessage=error?.message || String(error);
+    teamRefreshFailed=true;
+  } finally {
+    teamRefreshBusy=false;
+    render();
+  }
 }
 
 function matchListItem(g){

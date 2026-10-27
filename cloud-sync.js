@@ -1,6 +1,7 @@
 import { loadState, saveState, mutateState } from './db.js';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './supabase-config.js';
 import { applySheetOps, fetchSheetOps } from './sheet-ops.mjs';
+import { mergeTeamCloudSnapshot } from './team-refresh.mjs';
 
 const MEDIA_BUCKET='team-media';
 let clientPromise=null;
@@ -423,4 +424,74 @@ export async function getActiveLocalSummary(){
   const team=(state?.teams||[]).find(t=>t.id===state?.activeTeamId);
   if(!team) return null;
   return {teamId:team.id,name:team.name,players:(state.players||[]).filter(p=>p.teamId===team.id).length,matches:(state.games||[]).filter(g=>g.teamId===team.id).length};
+}
+
+
+/**
+ * Pull the latest published team backup and collaborative stat-sheet operations.
+ * This is deliberately read-only: the Home button never overwrites the cloud
+ * from a device that may still contain offline changes.
+ */
+export async function refreshActiveTeamFromCloud(expectedTeamId) {
+  try {
+    if (!navigator.onLine) throw new Error('You are offline. Connect to the internet to refresh synced team stats.');
+    const local = await loadState();
+    const team = (local?.teams || []).find(t => t.id === expectedTeamId && t.id === local.activeTeamId);
+    if (!team) throw new Error('Choose a team on the Home screen before updating.');
+    const supabase = await getClient();
+    const user = await currentUser();
+    if (!user) throw new Error('Sign in under Team to refresh synced data.');
+    const role = await membershipFor(team.id, user.id);
+    if (!role) throw new Error('This team is not shared with your account. Go to Team and join or sync the team first.');
+
+    const {data:backup, error:backupError} = await supabase.from('team_snapshots')
+      .select('snapshot').eq('team_id',team.id).maybeSingle();
+    if (backupError) throw backupError;
+    const snap = backup?.snapshot;
+    // A full sync preserves complete stat details and film corrections.
+    // Fall back to normalized tables if the first full backup has not run.
+    const remote = snap?.team?.id === team.id && Array.isArray(snap.games)
+      && Array.isArray(snap.players) && Array.isArray(snap.events)
+      ? snap : await normalizedRestoreData(supabase,team.id);
+    if (remote?.team?.id !== team.id) throw new Error('Cloud returned a different team. Nothing was changed.');
+
+    let ops = [];
+    let liveOpsUnavailable = false;
+    try {
+      ops = await fetchSheetOps(supabase,team.id);
+    } catch(error) {
+      if (!/sheet_stat_ops|relation .* does not exist|Could not find the table/i.test(error.message || '')) throw error;
+      liveOpsUnavailable = true;
+      console.warn('Cloud stat-sheet operation history unavailable.',error);
+    }
+
+    let report;
+    await mutateState(state => {
+      if (state.activeTeamId !== team.id) throw new Error('Active team changed during refresh. Please retry.');
+      const before = new Set((state.events || []).map(e => e.id));
+      report = mergeTeamCloudSnapshot(state,team.id,remote);
+      // Undo tombstones win over an older team snapshot. Local pending taps and
+      // undo actions remain on the device and are not uploaded by this button.
+      const pending = (state.sheetPendingOps || []).filter(op => op.team_id === team.id);
+      applySheetOps(state,[...ops,...pending]);
+      report.addedStats = (state.events || []).filter(e => !before.has(e.id) && e.teamId === team.id).length;
+      report.pending = pending.length;
+      return state;
+    });
+
+    const changes = report.addedStats + report.addedMatches + report.addedPlayers + report.updated + report.removed;
+    const summary = changes
+      ? 'Team updated: ' + report.addedStats + ' new stats, ' + report.addedMatches
+        + ' new matches, ' + report.addedPlayers + ' new players, '
+        + report.updated + ' cloud changes applied.'
+      : 'Checked cloud data. No new changes to apply.';
+    const notes = [];
+    if (report.conflicts) notes.push(report.conflicts + ' existing local records were preserved instead of overwritten.');
+    if (report.pending) notes.push(report.pending + ' stat-sheet edits are still waiting to upload.');
+    if (liveOpsUnavailable) notes.push('Live stat-sheet history was unavailable; only the published backup was checked.');
+    return {teamId:team.id, message:[summary,...notes].join(' ')};
+  } catch(error) {
+    console.error('Update Team failed',error);
+    throw new Error(describeSyncError(error));
+  }
 }
