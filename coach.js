@@ -790,7 +790,14 @@ async function undoEvent(){
 
 async function endSet(){
   const g=activeGame();if(!g)return;if(g.homeScore===g.awayScore&&!confirm('The set is tied. End it anyway?'))return;
-  g.sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});g.currentSet++;g.homeScore=0;g.awayScore=0;selectedPlayerId=null;await persist();openLineupEditor(g,g.currentSet,{afterSave:()=>setView('gameday')});
+  if(isClubTeam(teamForGame(g))&&g.currentSet>3)return alert('Club matches cannot exceed three sets.');
+  g.sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});
+  if(isClubTeam(teamForGame(g))&&clubMatchResult(g.sets).done){
+    g.complete=true;g.completedAt=new Date().toISOString();state.activeGameId=null;selectedPlayerId=null;
+    await persist();render();showGameSummary(g.id);return;
+  }
+  g.currentSet++;g.homeScore=0;g.awayScore=0;selectedPlayerId=null;
+  await persist();openLineupEditor(g,g.currentSet,{afterSave:()=>setView('gameday')});
 }
 
 async function createStreamMatch(data={}){
@@ -870,7 +877,12 @@ async function endSetForStream(){
   const g=activeGame();if(!g)return false;
   if(g.homeScore===g.awayScore&&!confirm('The set is tied. End it anyway?'))return false;
   const finishedSet=Number(g.currentSet)||1;
+  if(isClubTeam(teamForGame(g))&&finishedSet>3){alert('Club matches cannot exceed three sets.');return false;}
   g.sets.push({set:finishedSet,home:g.homeScore,away:g.awayScore});
+  if(isClubTeam(teamForGame(g))&&clubMatchResult(g.sets).done){
+    g.complete=true;g.completedAt=new Date().toISOString();state.activeGameId=null;selectedPlayerId=null;
+    await persist();render();return true;
+  }
   g.currentSet=finishedSet+1;g.homeScore=0;g.awayScore=0;selectedPlayerId=null;
   if(g.streamOnly){
     g.streamStartServeBySet=g.streamStartServeBySet||{};
@@ -885,6 +897,18 @@ async function endSetForStream(){
 
 async function endMatch(){
   const g=activeGame();if(!g)return;
+  if(isClubTeam(teamForGame(g))){
+    const sets=[...g.sets];
+    if(g.homeScore||g.awayScore){
+      if(g.homeScore===g.awayScore)return alert('The current club set is tied. Finish it before ending the match.');
+      if(g.currentSet>3)return alert('Club matches cannot exceed three sets.');
+      sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});
+    }
+    if(!clubMatchResult(sets).done)return alert('Club matches end only when a team wins 2 sets (2–0 or 2–1).');
+    if(!confirm('Complete this best-of-three club match?'))return;
+    g.sets=sets;g.complete=true;g.completedAt=new Date().toISOString();state.activeGameId=null;selectedPlayerId=null;
+    await persist();render();showGameSummary(g.id);return;
+  }
   if((g.homeScore||g.awayScore)&&confirm(`Save current Set ${g.currentSet} as ${g.homeScore}-${g.awayScore}?`))g.sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});
   if(!confirm('Mark this match complete? You can still view all saved stats, lineups and substitutions afterward.'))return;
   g.complete=true;g.completedAt=new Date().toISOString();state.activeGameId=null;selectedPlayerId=null;await persist();showGameSummary(g.id);render();
