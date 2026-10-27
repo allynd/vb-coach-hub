@@ -25,11 +25,11 @@ function record(games){
 }
 
 function conferenceLabel(type){
-  return type==='conference' ? 'Conference' : type==='nonconference' ? 'Non-Conference' : 'Unclassified';
+  return type==='conference' ? 'Conference' : type==='nonconference' ? 'Non-Conference' : type==='postseason' ? 'Post Season' : 'Unclassified';
 }
 
 function conferenceShort(type){
-  return type==='conference' ? 'CONF' : type==='nonconference' ? 'NON-CONF' : 'UNCLASSIFIED';
+  return type==='conference' ? 'CONF' : type==='nonconference' ? 'NON-CONF' : type==='postseason' ? 'POST SEASON' : 'UNCLASSIFIED';
 }
 
 async function setGameConference(gameId,type){
@@ -77,7 +77,7 @@ function addRsPosition(){
 }
 
 function conferenceField(id,value='',allowUnclassified=false){
-  return `<div class="field conference-field"><label>Match Type</label><select id="${id}">${allowUnclassified?`<option value="" ${!value?'selected':''}>Unclassified</option>`:''}<option value="conference" ${value==='conference'?'selected':''}>Conference</option><option value="nonconference" ${value==='nonconference'?'selected':''}>Non-Conference</option></select></div>`;
+  return `<div class="field conference-field"><label>Match Type</label><select id="${id}">${allowUnclassified?`<option value="" ${!value?'selected':''}>Unclassified</option>`:''}<option value="conference" ${value==='conference'?'selected':''}>Conference</option><option value="nonconference" ${value==='nonconference'?'selected':''}>Non-Conference</option><option value="postseason" ${value==='postseason'?'selected':''}>Post Season</option></select></div>`;
 }
 
 async function enhanceTrackedNewMatch(){
@@ -172,23 +172,26 @@ async function enhanceRecords(){
   if(!state?.activeTeamId) return;
   const games=(state.games||[]).filter(g=>g.teamId===state.activeTeamId && g.complete);
   const overall=record(games);
+  // Playoff results are excluded from the regular-season record, but included in Overall.
+  const regular=record(games.filter(g=>g.conferenceType!=='postseason'));
+  const postseason=record(games.filter(g=>g.conferenceType==='postseason'));
   const conf=record(games.filter(g=>g.conferenceType==='conference'));
   const nonconf=record(games.filter(g=>g.conferenceType==='nonconference'));
-  const unclassified=games.filter(g=>!g.conferenceType).length;
+  const unclassified=games.filter(g=>!['conference','nonconference','postseason'].includes(g.conferenceType)).length;
 
   // Dashboard record split.
   const hero=$('.team-hero-card',main);
   if(hero && !$('#conferenceRecordSplit',hero)){
     const recordEl=$('.record',hero);
     const seasonLabel=recordEl?.nextElementSibling;
-    seasonLabel?.insertAdjacentHTML('afterend',`<div id="conferenceRecordSplit" class="stat-strip" style="margin:12px 0"><div class="metric"><span class="muted">Overall</span><b>${overall.w}-${overall.l}</b></div><div class="metric"><span class="muted">Conference</span><b>${conf.w}-${conf.l}</b></div><div class="metric"><span class="muted">Non-Conf</span><b>${nonconf.w}-${nonconf.l}</b></div></div>${unclassified?`<div class="muted helper">${unclassified} completed match${unclassified===1?' is':'es are'} unclassified. Open Games to classify.</div>`:''}`);
+    seasonLabel?.insertAdjacentHTML('afterend',`<div id="conferenceRecordSplit" class="stat-strip" style="margin:12px 0"><div class="metric"><span class="muted">Overall</span><b>${overall.w}-${overall.l}</b></div><div class="metric"><span class="muted">Regular Season</span><b>${regular.w}-${regular.l}</b></div><div class="metric"><span class="muted">Post Season</span><b>${postseason.w}-${postseason.l}</b></div><div class="metric"><span class="muted">Conference</span><b>${conf.w}-${conf.l}</b></div><div class="metric"><span class="muted">Non-Conf</span><b>${nonconf.w}-${nonconf.l}</b></div></div>${unclassified?`<div class="muted helper">${unclassified} completed match${unclassified===1?' is':'es are'} unclassified. Open Games to classify.</div>`:''}`);
   }
 
   // Games page record split and classification labels.
   const heading=$('.section-head h2',main);
   if(heading?.textContent.trim()==='Games'){
     const firstStrip=$('.stat-strip',main);
-    if(firstStrip && !$('#conferenceGameRecords',main)) firstStrip.insertAdjacentHTML('afterend',`<div id="conferenceGameRecords" class="stat-strip" style="margin-bottom:14px"><div class="metric"><span class="muted">Conference</span><b>${conf.w}-${conf.l}</b></div><div class="metric"><span class="muted">Non-Conference</span><b>${nonconf.w}-${nonconf.l}</b></div><div class="metric"><span class="muted">Unclassified</span><b>${unclassified}</b></div></div>`);
+    if(firstStrip && !$('#conferenceGameRecords',main)) firstStrip.insertAdjacentHTML('afterend',`<div id="conferenceGameRecords" class="stat-strip" style="margin-bottom:14px"><div class="metric"><span class="muted">Regular Season</span><b>${regular.w}-${regular.l}</b></div><div class="metric"><span class="muted">Post Season</span><b>${postseason.w}-${postseason.l}</b></div><div class="metric"><span class="muted">Conference</span><b>${conf.w}-${conf.l}</b></div><div class="metric"><span class="muted">Non-Conference</span><b>${nonconf.w}-${nonconf.l}</b></div><div class="metric"><span class="muted">Unclassified</span><b>${unclassified}</b></div></div>`);
 
     for(const row of $$('[data-game]',main)){
       const game=(state.games||[]).find(g=>g.id===row.dataset.game);

@@ -129,6 +129,12 @@ For older, film-entered, and manual-result matches, open **Sheets → Players �
 
 Pass average uses **3 → 3**, **2 → 2**, **1 → 1**, **Overpass → 1**, and **Receive Error → 0**. An overpass is still tracked separately and remains part of the total serve-receive opportunities. These calculations automatically apply to prior recorded events; no database migration is required.
 
+### Match Classification & Post Season Records
+
+When creating, manually entering, streaming, or correcting a match, select **Conference**, **Non-Conference**, **Post Season**, or **Unclassified**. Match classifications are stored on each game as its `conferenceType` (the postseason value is `postseason`), so older records are preserved and no database migration is required.
+
+The Dashboard and Games page show **Overall**, **Regular Season**, and **Post Season** win-loss records as well as Conference and Non-Conference splits. **Regular Season** excludes Post Season games, while **Overall** includes both; unclassified games count toward Regular Season until classified. Post Season games do not count toward Conference or Non-Conference records. Player season and career **stat totals** continue to include all matches, including playoffs.
+
 ### Automatic Statistics
 
 Coach Hub calculates statistics from the underlying event history rather than relying on manually entered cumulative totals.

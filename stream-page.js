@@ -76,7 +76,7 @@ async function openStreamMatchSetup(){
     <div class="form-grid" style="margin-top:12px">
       <div class="field"><label>Opponent</label><input id="streamNewOpponent" placeholder="Opponent name"></div>
       <div class="field"><label>Date</label><input id="streamNewDate" type="date" value="${today()}"></div>
-      <div class="field"><label>Match Type</label><select id="streamNewConference"><option value="conference">Conference</option><option value="nonconference">Non-Conference</option><option value="">Unclassified</option></select></div>
+      <div class="field"><label>Match Type</label><select id="streamNewConference"><option value="conference">Conference</option><option value="nonconference">Non-Conference</option><option value="postseason">Post Season</option><option value="">Unclassified</option></select></div>
       <div class="field"><label>Site</label><select id="streamNewSite"><option value="home">Home</option><option value="away">Away</option><option value="neutral">Neutral</option></select></div>
       <div class="field"><label>Where / Venue</label><input id="streamNewLocation" placeholder="School, gym, tournament, city…"></div>
       <div class="field"><label>First Serve</label><select id="streamNewServe"><option value="home">${esc(team.name||'Team')}</option><option value="away">Opponent</option></select></div>

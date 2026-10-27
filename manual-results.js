@@ -57,6 +57,7 @@ async function openEditor(gameId=null){
       <div class="field"><label>Match Type</label><select id="manualConferenceType">
         <option value="conference" ${(game?.conferenceType||'conference')==='conference'?'selected':''}>Conference</option>
         <option value="nonconference" ${game?.conferenceType==='nonconference'?'selected':''}>Non-Conference</option>
+        <option value="postseason" ${game?.conferenceType==='postseason'?'selected':''}>Post Season</option>
         <option value="" ${game && !game?.conferenceType?'selected':''}>Unclassified</option>
       </select></div>
     </div>
