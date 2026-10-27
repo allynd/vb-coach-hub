@@ -1,6 +1,7 @@
 // Browser export feature. Workbook generation stays on this device, including offline.
 import { correctionSetNumbers } from './match-corrections.mjs';
 import { withPerSetRates } from './player-set-rates.mjs';
+import {buildPlayerSeasonReport} from './player-season-report.mjs';
 const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fields=[['Sets Played','SP'],['Kills','K'],['Kills / Set','KPS','0.00'],['Digs / Set','DPS','0.00'],['Blocks / Set','BPS','0.00'],['Attack Errors','E'],['Attempts','ATTEMPTS'],['2-Hand Tips','TIPS'],['Total Attacks','ATT'],['Hitting %','HIT','0.000'],['Aces','ACE'],['Serve Errors','SE'],['Foot Faults','FOOTFAULT'],['Serve Attempts','SA'],['Serve In %','SERVE','0.0%'],['Solo Blocks','BS'],['Block Assists','BA'],['Block Errors','BE','#,##0.##'],['Assists','A'],['Digs','D'],['Defensive Errors','DE'],['Set Errors / BHE','BHE'],['Non-Setter OOS','OOS'],['Receive Attempts','PR'],['Receive Errors','RE'],['Overpasses','OVERPASS'],['Pass Average','PASS','0.00'],['Receive Error %','RECEIVE_ERROR','0.0%'],['Receive Success %','RECEIVE_SUCCESS','0.0%'],['Defensive Success %','DEFENSE_SUCCESS','0.0%']];
 const key=p=>p.personId||p.id;
@@ -82,15 +83,80 @@ export async function writeExcelReport(report){
  }
  const bytes=await wb.xlsx.writeBuffer();return new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }
-export function openExcelExport({state,summarize,gameId=null,playerId=null}){
+/** Detailed player-only season export: one aggregate row, then one row per match. */
+export async function writePlayerSeasonWorkbook(report){
+ if(!globalThis.ExcelJS)throw Error('Excel exporter has not loaded. Reopen the app while online once, then try again.');
+ const wb=new ExcelJS.Workbook();
+ wb.creator='Coach Hub';wb.created=new Date();wb.calcProperties.fullCalcOnLoad=true;
+ const ws=wb.addWorksheet('Season Match Breakdown',{views:[{state:'frozen',xSplit:2,ySplit:6,showGridLines:false}],pageSetup:{orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0}});
+ const meta=[['Date',15],['Opponent',25],['Tournament',26],['Round',18],['Result',14],['Sets',12],['Set Scores',32],['Participation',30]];
+ ws.columns=[...meta.map(([_,width])=>({width})),...fields.map(([label])=>({width:Math.max(13,Math.min(20,label.length+2))}))];
+ ws.mergeCells(1,1,1,12);
+ const title=ws.getCell('A1');
+ title.value=[report.player.firstName,report.player.lastName].filter(Boolean).join(' ')+' — Season '+(report.team.season||'');
+ title.font={name:'Calibri',size:18,bold:true,color:{argb:'FFFFFFFF'}};
+ title.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF142B45'}};
+ title.alignment={vertical:'middle'};ws.getRow(1).height=36;
+ ws.mergeCells(2,1,2,12);
+ ws.getCell('A2').value=report.team.name+' • #'+(report.player.jersey||'—')+' • '+(report.player.position||'Player');
+ ws.getCell('A2').font={name:'Calibri',size:12,bold:true,color:{argb:'FF087F8C'}};
+ ws.getRow(2).height=25;
+ ws.mergeCells(3,1,3,12);
+ ws.getCell('A3').value='Season totals are first. Each match is one row below. A separate adjustments row appears only if season-only corrections exist.';
+ ws.getCell('A3').font={name:'Calibri',size:10,color:{argb:'FF596A7B'}};
+ ws.getCell('A3').alignment={wrapText:true,vertical:'middle'};ws.getRow(3).height=26;
+ const header=ws.getRow(5);header.values=[...meta.map(m=>m[0]),...fields.map(f=>f[0])];header.height=46;
+ header.eachCell({includeEmpty:true},cell=>{cell.font={name:'Calibri',size:10,bold:true,color:{argb:'FFFFFFFF'}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF087F8C'}};cell.alignment={vertical:'middle',wrapText:true};});
+ const fullMeta=(label,extra={})=>[extra.date||'',label,extra.tournament||'',extra.round||'',extra.result||'',extra.sets||'',extra.setScores||'',extra.participation||''];
+ const rows=[{kind:'total',meta:fullMeta('SEASON TOTAL',{participation:'Entire season'}),stats:report.seasonStats}];
+ for(const match of report.matches){
+  rows.push({kind:'match',meta:[match.date,match.opponent,match.tournament,match.round,match.result,match.sets,match.setScores,match.participation],stats:match.stats});
+ }
+ if(report.adjustmentStats)rows.push({kind:'adjustments',meta:fullMeta('SEASON ADJUSTMENTS',{participation:'Corrections only; not a match'}),stats:report.adjustmentStats});
+ rows.forEach(({kind,meta,stats},i)=>{
+  const idx=6+i,row=ws.getRow(idx),isTotal=kind==='total',isAdjustment=kind==='adjustments';
+  row.values=[...meta,...fields.map(([,key])=>stats[key]??null)];row.height=isTotal?31:26;
+  row.eachCell({includeEmpty:true},(cell,j)=>{
+   const fill=isTotal?'FFD5ECEE':isAdjustment?'FFFCEBC8':i%2?'FFFFFFFF':'FFF0F4F8';
+   cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:fill}};
+   cell.font={name:'Calibri',size:10,bold:isTotal||isAdjustment,color:{argb:'FF263445'}};
+   cell.alignment={vertical:'middle',horizontal:j>meta.length?'right':'left'};
+   if(j>meta.length)cell.numFmt=fields[j-meta.length-1][2]||'#,##0';
+  });
+  // Calculated columns reference the counts in this SAME row, not rounded match rates.
+  const ref=key=>ws.getColumn(meta.length+1+fields.findIndex(f=>f[1]===key)).letter+idx;
+  const formulas={
+   ATT:ref('K')+'+'+ref('E')+'+'+ref('ATTEMPTS'),
+   HIT:'IF('+ref('ATT')+'=0,0,('+ref('K')+'-'+ref('E')+')/'+ref('ATT')+')',
+   SERVE:'IF('+ref('SA')+'=0,0,('+ref('SA')+'-'+ref('SE')+')/'+ref('SA')+')',
+   KPS:'IF('+ref('SP')+'=0,"",'+ref('K')+'/'+ref('SP')+')',
+   DPS:'IF('+ref('SP')+'=0,"",'+ref('D')+'/'+ref('SP')+')',
+   BPS:'IF('+ref('SP')+'=0,"",('+ref('BS')+'+'+ref('BA')+')/'+ref('SP')+')',
+   RECEIVE_ERROR:'IF('+ref('PR')+'=0,"",'+ref('RE')+'/'+ref('PR')+')',
+   RECEIVE_SUCCESS:'IF('+ref('PR')+'=0,"",('+ref('PR')+'-'+ref('RE')+')/'+ref('PR')+')',
+   DEFENSE_SUCCESS:'IF('+ref('D')+'+'+ref('DE')+'=0,"",'+ref('D')+'/('+ref('D')+'+'+ref('DE')+'))'
+  };
+  for(const [key,formula] of Object.entries(formulas)){const cell=ws.getCell(ref(key));cell.value={formula,result:cell.value??''};}
+ });
+ if(!report.matches.length){const row=ws.getRow(7);row.getCell(2).value='No matches recorded for this season.';row.getCell(2).font={italic:true,color:{argb:'FF596A7B'}};}
+ ws.autoFilter={from:{row:5,column:1},to:{row:5+rows.length,column:meta.length+fields.length}};
+ const note=ws.getRow(9+rows.length);
+ ws.mergeCells(note.number,1,note.number,12);note.height=55;
+ note.getCell(1).value='Each row represents one team match, even if the player did not play. Sets Played counts documented court appearances, not roster membership. Rates are recalculated from totals, not averaged match percentages. Attempts exclude kills/errors; overpasses count as 1-point passes. Season adjustments are not assigned to any match.';
+ note.getCell(1).font={name:'Calibri',size:10,color:{argb:'FF596A7B'}};
+ note.getCell(1).alignment={wrapText:true,vertical:'top'};
+ const bytes=await wb.xlsx.writeBuffer();
+ return new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+export function openExcelExport({state,summarize,gameId=null,playerId=null,scope=null}){
  let dialog=document.querySelector('#excelExportDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='excelExportDialog';dialog.className='quick-stat-dialog';document.body.append(dialog);}
  const team=state.teams.find(t=>t.id===state.activeTeamId);if(!team)return alert('Choose a team first.');
  const games=state.games.filter(g=>g.teamId===team.id).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
  const players=state.players.filter(p=>p.teamId===team.id).sort((a,b)=>String(a.lastName).localeCompare(String(b.lastName)));
- dialog.innerHTML=`<form method="dialog" class="quick-stat-sheet"><div class="quick-stat-head"><h2>Export Excel Stats</h2><button class="icon-btn" aria-label="Close">✕</button></div><div class="field"><label>Period</label><select id="excelScope"><option value="set">One Set</option><option value="match">Match + Set Breakdowns</option><option value="season">Season</option><option value="career">Career</option></select></div><div class="field" id="excelMatchField"><label>Match</label><select id="excelMatch">${games.map(g=>`<option value="${escapeHtml(g.id)}">${escapeHtml(g.date)} vs ${escapeHtml(g.opponent)}</option>`).join('')}</select></div><div class="field" id="excelSetField"><label>Set</label><select id="excelSet"></select></div><div class="field"><label>Players</label><select id="excelPlayer"><option value="">All Players</option>${players.map(p=>`<option value="${escapeHtml(p.id)}">#${escapeHtml(p.jersey)} ${escapeHtml(p.firstName)} ${escapeHtml(p.lastName)}${p.archived?' (archived)':''}</option>`).join('')}</select></div><p class="muted">Career exports combine linked player profiles across saved seasons. Opponent missed serves appear on team set, match, and season reports.</p><p id="excelStatus" role="status"></p><button type="button" class="btn primary" id="excelDownload">Download .xlsx</button></form>`;
- const q=s=>dialog.querySelector(s);q('#excelScope').value=gameId?'match':'season';if(gameId)q('#excelMatch').value=gameId;if(playerId)q('#excelPlayer').value=playerId;
- function refresh(){const scope=q('#excelScope').value;const match=games.find(g=>g.id===q('#excelMatch').value);q('#excelMatchField').hidden=!['set','match'].includes(scope);q('#excelSetField').hidden=scope!=='set';const ev=state.events.filter(e=>e.gameId===match?.id);const sets=match?correctionSetNumbers(match,ev):[];q('#excelSet').innerHTML=sets.map(n=>`<option value="${n}">Set ${n}</option>`).join('');q('#excelDownload').disabled=['set','match'].includes(scope)&&(!match||(scope==='set'&&!sets.length));}
- q('#excelScope').onchange=refresh;q('#excelMatch').onchange=refresh;refresh();
- q('#excelDownload').onclick=async()=>{const button=q('#excelDownload');button.disabled=true;q('#excelStatus').textContent='Preparing workbook…';try{const report=exportReportData(state,{teamId:team.id,scope:q('#excelScope').value,gameId:q('#excelMatch').value,setNo:q('#excelSet').value,playerId:q('#excelPlayer').value},summarize);const blob=await writeExcelReport(report);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=report.filename.replace(/[\\/:*?"<>|]/g,'-');document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);q('#excelStatus').textContent='Workbook downloaded.';}catch(e){q('#excelStatus').textContent=e.message;}finally{refresh();}};
+ dialog.innerHTML=`<form method="dialog" class="quick-stat-sheet"><div class="quick-stat-head"><h2>Export Excel Stats</h2><button class="icon-btn" aria-label="Close">✕</button></div><div class="field"><label>Period</label><select id="excelScope"><option value="set">One Set</option><option value="match">Match + Set Breakdowns</option><option value="season">Season</option><option value="playerSeason">Player Season + Match Breakdown</option><option value="career">Career</option></select></div><div class="field" id="excelMatchField"><label>Match</label><select id="excelMatch">${games.map(g=>`<option value="${escapeHtml(g.id)}">${escapeHtml(g.date)} vs ${escapeHtml(g.opponent)}</option>`).join('')}</select></div><div class="field" id="excelSetField"><label>Set</label><select id="excelSet"></select></div><div class="field"><label>Players</label><select id="excelPlayer"><option value="">All Players</option>${players.map(p=>`<option value="${escapeHtml(p.id)}">#${escapeHtml(p.jersey)} ${escapeHtml(p.firstName)} ${escapeHtml(p.lastName)}${p.archived?' (archived)':''}</option>`).join('')}</select></div><p class="muted">Player Season + Match Breakdown exports one sheet with a total followed by every match and any separate season corrections. Career exports combine linked player profiles across saved seasons. Opponent missed serves appear on team set, match, and season reports.</p><p id="excelStatus" role="status"></p><button type="button" class="btn primary" id="excelDownload">Download .xlsx</button></form>`;
+ const q=s=>dialog.querySelector(s);q('#excelScope').value=scope||(gameId?'match':'season');if(gameId)q('#excelMatch').value=gameId;if(playerId)q('#excelPlayer').value=playerId;
+ function refresh(){const scope=q('#excelScope').value;const match=games.find(g=>g.id===q('#excelMatch').value);q('#excelMatchField').hidden=!['set','match'].includes(scope);q('#excelSetField').hidden=scope!=='set';const ev=state.events.filter(e=>e.gameId===match?.id);const sets=match?correctionSetNumbers(match,ev):[];q('#excelSet').innerHTML=sets.map(n=>`<option value="${n}">Set ${n}</option>`).join('');q('#excelDownload').disabled=(scope==='playerSeason'&&!q('#excelPlayer').value)||(['set','match'].includes(scope)&&(!match||(scope==='set'&&!sets.length)));}
+ q('#excelScope').onchange=refresh;q('#excelMatch').onchange=refresh;q('#excelPlayer').onchange=refresh;refresh();
+ q('#excelDownload').onclick=async()=>{const button=q('#excelDownload');button.disabled=true;q('#excelStatus').textContent='Preparing workbook…';try{const selectedScope=q('#excelScope').value;const report=selectedScope==='playerSeason'?buildPlayerSeasonReport(state,{teamId:team.id,playerId:q('#excelPlayer').value},summarize):exportReportData(state,{teamId:team.id,scope:selectedScope,gameId:q('#excelMatch').value,setNo:q('#excelSet').value,playerId:q('#excelPlayer').value},summarize);const blob=selectedScope==='playerSeason'?await writePlayerSeasonWorkbook(report):await writeExcelReport(report);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=report.filename.replace(/[\\/:*?"<>|]/g,'-');document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);q('#excelStatus').textContent='Workbook downloaded.';}catch(e){q('#excelStatus').textContent=e.message;}finally{refresh();}};
  dialog.showModal();
 }
