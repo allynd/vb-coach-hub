@@ -249,8 +249,14 @@ function renderDashboard(){
   $('#main').innerHTML=`
     <section class="hero">
       <div class="card team-hero-card">
-        <div class="team-identity">${teamLogo(t,'hero-logo')}<div><div class="muted">${esc(t.school||'Team')} ${t.level?`• ${esc(t.level)}`:''}</div><h2>${esc(t.name)}</h2></div></div>
-        <div class="record">${rec.w}-${rec.l}</div><p class="muted">Overall record (includes post season)</p>
+        <div class="team-banner">
+          ${t.logo ? `<img class="team-banner-art" src="${esc(t.logo)}" alt="" aria-hidden="true">` : ""}
+          <div class="team-banner-content">
+            <div class="team-identity">${t.logo ? '' : teamLogo(t,'hero-logo')}<div><div class="muted">${esc(t.school||'Team')} ${t.level?`• ${esc(t.level)}`:''}</div><h2>${esc(t.name)}</h2></div></div>
+            <div class="record">${rec.w}-${rec.l}</div>
+            <p class="muted">Overall record (includes post season)</p>
+          </div>
+        </div>
         <div class="big-actions"><button class="btn primary big-action" id="dashNewMatch"><strong>🏐 New Match</strong><span>Set lineup, then track</span></button><button class="btn big-action" id="dashRoster"><strong>👥 Roster</strong><span>${teamPlayers().length} active players</span></button></div>
       </div>
       <div class="card"><h3>Season Team Stats</h3><div class="stat-strip"><div class="metric"><span class="muted">Hit %</span><b>${fmtPct(ts.HIT)}</b></div><div class="metric"><span class="muted">Aces</span><b>${ts.ACE}</b></div><div class="metric"><span class="muted">Digs</span><b>${ts.D}</b></div><div class="metric"><span class="muted">Pass Avg</span><b>${ts.PASS.toFixed(2)}</b></div></div>${latest?`<hr><div class="muted">Latest match</div><h3>${esc(latest.opponent||'Opponent')} • ${latest.complete?'Final':'In progress'}</h3><button class="btn compact" id="openLatest">${latest.complete?'View stats':'Resume match'}</button>`:''}</div>

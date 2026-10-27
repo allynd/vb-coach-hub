@@ -184,7 +184,8 @@ async function enhanceRecords(){
   if(hero && !$('#conferenceRecordSplit',hero)){
     const recordEl=$('.record',hero);
     const seasonLabel=recordEl?.nextElementSibling;
-    seasonLabel?.insertAdjacentHTML('afterend',`<div id="conferenceRecordSplit" class="stat-strip" style="margin:12px 0"><div class="metric"><span class="muted">Overall</span><b>${overall.w}-${overall.l}</b></div><div class="metric"><span class="muted">Regular Season</span><b>${regular.w}-${regular.l}</b></div><div class="metric"><span class="muted">Post Season</span><b>${postseason.w}-${postseason.l}</b></div><div class="metric"><span class="muted">Conference</span><b>${conf.w}-${conf.l}</b></div><div class="metric"><span class="muted">Non-Conf</span><b>${nonconf.w}-${nonconf.l}</b></div></div>${unclassified?`<div class="muted helper">${unclassified} completed match${unclassified===1?' is':'es are'} unclassified. Open Games to classify.</div>`:''}`);
+    const recordBreakdownAnchor=$('.team-banner',hero)||seasonLabel;
+    recordBreakdownAnchor?.insertAdjacentHTML('afterend',`<div id="conferenceRecordSplit" class="stat-strip" style="margin:12px 0"><div class="metric"><span class="muted">Overall</span><b>${overall.w}-${overall.l}</b></div><div class="metric"><span class="muted">Regular Season</span><b>${regular.w}-${regular.l}</b></div><div class="metric"><span class="muted">Post Season</span><b>${postseason.w}-${postseason.l}</b></div><div class="metric"><span class="muted">Conference</span><b>${conf.w}-${conf.l}</b></div><div class="metric"><span class="muted">Non-Conf</span><b>${nonconf.w}-${nonconf.l}</b></div></div>${unclassified?`<div class="muted helper">${unclassified} completed match${unclassified===1?' is':'es are'} unclassified. Open Games to classify.</div>`:''}`);
   }
 
   // Games page record split and classification labels.

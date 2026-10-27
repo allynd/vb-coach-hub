@@ -249,3 +249,52 @@ hr { border:0; border-top:1px solid var(--line); margin:16px 0; }
   .archived-player-row>.btn{flex:0 0 auto}
   .archived-player-open .avatar{width:42px;height:42px}
 }
+
+/* Dashboard team identity banner – oversized team logo with readable foreground. */
+.team-hero-card { overflow: hidden; }
+.team-banner {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin: -16px -16px 0;
+  min-height: 196px;
+  padding: 20px 20px 22px;
+  background: linear-gradient(115deg, #101b32 0%, #192b4b 65%, #233b64 100%);
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+}
+.team-banner-art {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  right: -5%;
+  width: 76%;
+  height: 156%;
+  transform: translateY(-50%);
+  object-fit: contain;
+  object-position: center;
+  opacity: .55;
+  pointer-events: none;
+  user-select: none;
+}
+.team-banner::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(10,16,31,.98) 0%, rgba(11,20,38,.91) 40%, rgba(12,23,45,.38) 100%);
+  pointer-events: none;
+}
+.team-banner-content { position: relative; z-index: 2; }
+.team-banner .team-identity { margin-bottom: 16px; }
+.team-banner .team-identity h2,
+.team-banner .record { text-shadow: 0 2px 14px rgba(0,0,0,.42); }
+.team-banner p.muted { margin: 8px 0 0; color: #c3cee0; }
+.team-hero-card .big-actions { margin-top: 12px; }
+
+@media (max-width: 560px) {
+  .team-banner { padding: 18px 16px 20px; min-height: 180px; }
+  .team-banner-art { width: 105%; height: 137%; right: -29%; opacity: .48; }
+  .team-banner::after {
+    background: linear-gradient(90deg, rgba(10,16,31,.99) 0%, rgba(11,20,38,.90) 52%, rgba(12,23,45,.45) 100%);
+  }
+}
