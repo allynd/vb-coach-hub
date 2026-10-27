@@ -1,5 +1,6 @@
 import { loadState, saveState } from './db.js';
 import {isClubTeam,validClubManualResult} from './team-modes.mjs';
+import {CLUB_ROUNDS} from './club-tournaments.mjs';
 
 const $ = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => [...root.querySelectorAll(s)];
@@ -47,23 +48,25 @@ async function openEditor(gameId=null){
   const lost = Number(game?.manualSetsLost ?? game?.sets?.[0]?.away ?? 0);
   const team=(state.teams||[]).find(t=>t.id===(game?.teamId||state.activeTeamId));
   const club=isClubTeam(team);
+  const selectedRound=game?.eventRound||'Pool Play';
+  const roundOptions='<option value="">Unassigned / TBD</option>'+CLUB_ROUNDS.map(label=>`<option value="${esc(label)}" ${label===selectedRound?'selected':''}>${esc(label)}</option>`).join('');
 
   $('#manualResultBody').innerHTML = `
     <p class="muted">Enter the final match record now. Player and opponent stats can be added or corrected later, set by set.</p>
     <div class="form-grid">
       <div class="field"><label>Opponent</label><input id="manualOpponent" value="${esc(game?.opponent||'')}" placeholder="Opponent name"></div>
-      ${club?`<div class="field"><label>Tournament / Event</label><input id="manualEventName" value="${esc(game?.eventName||'')}" placeholder="Weekend tournament"></div>`:''}
+      ${club?`<div class="field"><label>Tournament / Event</label><input id="manualEventName" value="${esc(game?.eventName||'')}" placeholder="Weekend tournament"></div><div class="field"><label>Tournament Round</label><select id="manualEventRound">${roundOptions}</select></div>`:''}
       <div class="field"><label>Date</label><input id="manualDate" type="date" value="${esc(game?.date||today())}"></div>
       <div class="field"><label>Site</label><select id="manualSite"><option value="home" ${game?.siteType==='home'?'selected':''}>Home</option><option value="away" ${game?.siteType==='away'?'selected':''}>Away</option><option value="neutral" ${game?.siteType==='neutral'?'selected':''}>Neutral</option></select></div>
       <div class="field"><label>Where / Venue</label><input id="manualLocation" value="${esc(game?.location||'')}" placeholder="School, gym, tournament, city…"></div>
       <div class="field"><label>Sets Won</label><input id="manualSetsWon" type="number" min="0" inputmode="numeric" value="${won}"></div>
       <div class="field"><label>Sets Lost</label><input id="manualSetsLost" type="number" min="0" inputmode="numeric" value="${lost}"></div>
-      <div class="field"><label>Match Type</label><select id="manualConferenceType">
+      ${!club?`<div class="field"><label>Match Type</label><select id="manualConferenceType">
         <option value="conference" ${(game?.conferenceType||'conference')==='conference'?'selected':''}>Conference</option>
         <option value="nonconference" ${game?.conferenceType==='nonconference'?'selected':''}>Non-Conference</option>
         <option value="postseason" ${game?.conferenceType==='postseason'?'selected':''}>Post Season</option>
         <option value="" ${game && !game?.conferenceType?'selected':''}>Unclassified</option>
-      </select></div>
+      </select></div>`:''}
     </div>
     <div class="card" style="margin:12px 0">
       <div class="muted">Match Result</div>
@@ -90,7 +93,8 @@ async function openEditor(gameId=null){
     const location=$('#manualLocation').value.trim();
     const setsWon=Math.max(0,Number($('#manualSetsWon').value)||0);
     const setsLost=Math.max(0,Number($('#manualSetsLost').value)||0);
-    const conferenceType=$('#manualConferenceType')?.value||'';
+    const conferenceType=club?'':$('#manualConferenceType')?.value||'';
+    const eventRound=club?$('#manualEventRound')?.value||'':'';
     const result=resultFromSets(setsWon,setsLost);
 
     if(!opponent){ alert('Enter the opponent.'); return; }
@@ -127,7 +131,7 @@ async function openEditor(gameId=null){
     }
 
     Object.assign(target,{
-      opponent,date,siteType,location,conferenceType,eventName:club?$('#manualEventName')?.value.trim()||'':'',
+      opponent,date,siteType,location,conferenceType,eventName:club?$('#manualEventName')?.value.trim()||'':'',eventRound,
       manualRecord:true,
       manualSetsWon:setsWon,
       manualSetsLost:setsLost,
