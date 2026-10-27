@@ -1,4 +1,5 @@
 import { loadState, saveState } from './db.js';
+import {isClubTeam} from './team-modes.mjs';
 
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>[...r.querySelectorAll(s)];
@@ -70,11 +71,13 @@ async function openStreamMatchSetup(){
   if(!team)return alert('Choose or create a team first.');
   const modal=$('#modal'),title=$('#modalTitle'),body=$('#modalBody');
   if(!modal||!title||!body)return;
+  const club=isClubTeam(team);
   title.textContent='New Stream Match';
   body.innerHTML=`
     <div class="notice"><strong>Quick broadcast setup</strong><div class="muted">No roster, lineup, rotation, or player stats are required. You can attach player stats later.</div></div>
     <div class="form-grid" style="margin-top:12px">
       <div class="field"><label>Opponent</label><input id="streamNewOpponent" placeholder="Opponent name"></div>
+      ${club?`<div class="field"><label>Tournament / Event</label><input id="streamNewEvent" placeholder="Weekend tournament name"></div>`:''}
       <div class="field"><label>Date</label><input id="streamNewDate" type="date" value="${today()}"></div>
       <div class="field"><label>Match Type</label><select id="streamNewConference"><option value="conference">Conference</option><option value="nonconference">Non-Conference</option><option value="postseason">Post Season</option><option value="">Unclassified</option></select></div>
       <div class="field"><label>Site</label><select id="streamNewSite"><option value="home">Home</option><option value="away">Away</option><option value="neutral">Neutral</option></select></div>
@@ -90,6 +93,7 @@ async function openStreamMatchSetup(){
     const id=await api.createMatch({
       opponent,
       date:$('#streamNewDate',body).value||today(),
+      eventName:club?$('#streamNewEvent',body).value.trim():'',
       conferenceType:$('#streamNewConference',body).value||'',
       siteType:$('#streamNewSite',body).value||'home',
       location:$('#streamNewLocation',body).value.trim(),
@@ -141,7 +145,7 @@ async function useTimeout(side){
   setTimeoutUsed(game,side,used+1);
   try{
     await window.CoachHubStreamOverlay?.timeout?.(side);
-    flashMessage='Timeout banner sent • automatically clears after 45 seconds.';
+    flashMessage=`Timeout banner sent • automatically clears after ${isClubTeam((await context()).team)?20:45} seconds.`;
   }catch(e){
     console.warn('Could not send timeout banner',e);
     flashMessage='Timeout recorded. Live banner could not be sent.';
@@ -236,6 +240,7 @@ async function renderStreamPage(){
   const homeSets=(game.sets||[]).filter(s=>Number(s.home)>Number(s.away)).length;
   const awaySets=(game.sets||[]).filter(s=>Number(s.away)>Number(s.home)).length;
   const history=(game.sets||[]).map((s,i)=>`S${Number(s.set)||i+1} ${Number(s.home)||0}–${Number(s.away)||0}`).join('   •   ');
+  const timeoutSeconds=isClubTeam(team)?20:45;
   const homeTO=timeoutUsed(game,'home');
   const awayTO=timeoutUsed(game,'away');
   const streamServing=game.streamOnly?(game.streamServeBySet?.[String(game.currentSet)]||game.streamStartServeBySet?.[String(game.currentSet)]||'home'):null;
@@ -295,7 +300,7 @@ async function renderStreamPage(){
             <h3>${esc(team.name||'Team')} Timeout</h3>
             <div class="stream-timeout-count">${timeoutDots(homeTO)}</div>
           </div>
-          <div class="muted">${homeTO} of ${MAX_TIMEOUTS} used this set • banner runs 45 seconds</div>
+          <div class="muted">${homeTO} of ${MAX_TIMEOUTS} used this set • banner runs ${timeoutSeconds} seconds</div>
           <div class="stream-timeout-actions">
             <button type="button" class="btn primary stream-timeout-btn" id="streamHomeTimeout" ${homeTO>=MAX_TIMEOUTS?'disabled':''}>TIMEOUT • ${esc(team.name||'Team')}</button>
             <button type="button" class="btn compact ghost" id="streamHomeTimeoutUndo" ${homeTO<=0?'disabled':''}>Restore</button>
@@ -307,7 +312,7 @@ async function renderStreamPage(){
             <h3>${esc(game.opponent||'Opponent')} Timeout</h3>
             <div class="stream-timeout-count">${timeoutDots(awayTO)}</div>
           </div>
-          <div class="muted">${awayTO} of ${MAX_TIMEOUTS} used this set • banner runs 45 seconds</div>
+          <div class="muted">${awayTO} of ${MAX_TIMEOUTS} used this set • banner runs ${timeoutSeconds} seconds</div>
           <div class="stream-timeout-actions">
             <button type="button" class="btn stream-timeout-btn" id="streamAwayTimeout" ${awayTO>=MAX_TIMEOUTS?'disabled':''}>TIMEOUT • ${esc(game.opponent||'Opponent')}</button>
             <button type="button" class="btn compact ghost" id="streamAwayTimeoutUndo" ${awayTO<=0?'disabled':''}>Restore</button>
