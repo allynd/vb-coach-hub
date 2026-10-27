@@ -479,7 +479,7 @@ function renderClubTournamentDetail(group){
   const bracket=bracketStages.length?'<div class="club-round-columns">'+bracketStages.map(([round,matches])=>'<section class="club-round-column"><h3>'+esc(round)+'</h3><div class="list">'+matches.map(matchListItem).join('')+'</div></section>').join('')+'</div>':'<div class="muted">No matches have been recorded for this tournament yet.</div>';
   const roster=state.players.filter(p=>p.teamId===state.activeTeamId);
   const usedIds=new Set(events.map(e=>e.playerId).filter(Boolean));
-  const participants=roster.filter(p=>usedIds.has(p.id)).map(p=>({p,s:withPerSetRates(summarizeEvents(events,p.id),games,events,[p.id])})).sort((a,b)=>b.s.K-a.s.K);
+  const participants=roster.map(p=>({p,s:withPerSetRates(summarizeEvents(events,p.id),games,events,[p.id])})).filter(x=>x.s.SP>0||usedIds.has(x.p.id)).sort((a,b)=>b.s.K-a.s.K);
   const stats='<div class="table-wrap"><table><thead><tr><th>Player</th><th>SP</th><th>K</th><th>K/S</th><th>Aces</th><th>Digs</th><th>D/S</th><th>Assists</th><th>Blocks</th><th>Hit %</th><th>Pass</th></tr></thead><tbody>'
     +(participants.map(({p,s})=>'<tr><td>#'+esc(p.jersey||'—')+' '+esc(p.firstName)+' '+esc(p.lastName)+'</td><td>'+s.SP+'</td><td>'+s.K+'</td><td>'+formatPerSetRate(s.KPS)+'</td><td>'+s.ACE+'</td><td>'+s.D+'</td><td>'+formatPerSetRate(s.DPS)+'</td><td>'+s.A+'</td><td>'+(s.BS+s.BA)+'</td><td>'+fmtPct(s.HIT)+'</td><td>'+s.PASS.toFixed(2)+'</td></tr>').join('')
       ||'<tr><td colspan="11" class="muted">No player statistics for this tournament yet.</td></tr>')+'</tbody></table></div>';
@@ -491,7 +491,7 @@ function renderClubTournamentDetail(group){
     +(clubTournamentTab==='results'?'<section class="card"><h3>Match Results</h3>'+results+'</section>':clubTournamentTab==='bracket'?'<section class="card"><h3>Bracket and Pool Rounds</h3><p class="muted">Rounds reflect the match stage you select when entering scores. Seedings and advancement are not inferred.</p>'+bracket+'</section>':'<section class="card"><h3>Player Tournament Stats</h3>'+stats+'</section>')
     +'</div>';
   $('#clubTournamentBack').onclick=()=>{selectedClubTournament=null;clubTournamentTab='results';renderGames();};
-  $('#clubTournamentAdd').onclick=()=>openNewGame({eventName:group.name==='Unassigned tournament'?'':group.name});
+  $('#clubTournamentAdd').onclick=()=>openNewGame({eventName:group.key==='unassigned:'?'':group.name});
   document.querySelectorAll('[data-club-tab]').forEach(btn=>btn.onclick=()=>{clubTournamentTab=btn.dataset.clubTab;renderGames();});
   document.querySelectorAll('[data-game]').forEach(el=>el.onclick=()=>showGameSummary(el.dataset.game));
 }
