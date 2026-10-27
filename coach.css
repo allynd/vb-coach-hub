@@ -327,3 +327,28 @@ hr { border:0; border-top:1px solid var(--line); margin:16px 0; }
   line-height:1.4;
 }
 .team-update-error {color:#fecaca;background:rgba(239,68,68,.1);}
+
+
+/* Club-only tournament/game-day presentation (School layout unchanged). */
+.club-mode-indicator {
+  padding:10px 14px;
+  margin-bottom:14px;
+  border:1px solid rgba(96,165,250,.3);
+  border-radius:14px;
+  color:#bfdbfe;
+  background:rgba(96,165,250,.08);
+  font-weight:800;
+  font-size:13px;
+}
+.club-event-groups {display:grid;gap:14px;}
+.club-event-card .section-head h3 {margin:0;overflow-wrap:anywhere;min-width:0;}
+.club-event-day {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:12px 4px 7px;
+  margin-top:8px;
+  border-top:1px solid var(--line);
+  font-size:13px;
+}
+.club-event-day strong {color:var(--accent);}
