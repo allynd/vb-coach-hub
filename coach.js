@@ -479,8 +479,8 @@ function renderGames(){
       +'<div class="stat-strip" style="margin-bottom:14px"><div class="metric"><span class="muted">Tournaments</span><b>'+groups.size+'</b></div><div class="metric"><span class="muted">Matches</span><b>'+games.length+'</b></div><div class="metric"><span class="muted">Completed</span><b>'+completed+'</b></div><div class="metric"><span class="muted">Record</span><b>'+teamRecord(state.activeTeamId).w+'-'+teamRecord(state.activeTeamId).l+'</b></div></div>'
       +'<div class="club-event-groups">'+(body||'<div class="card empty">Create a match to begin your first tournament.</div>')+'</div>';
     $('#gamesNew').onclick=()=>openNewGame();
-    $('[data-club-next]').forEach(btn=>btn.onclick=()=>openNewGame({eventName:btn.dataset.clubNext}));
-    $('[data-game]').forEach(el=>el.onclick=()=>showGameSummary(el.dataset.game));
+    document.querySelectorAll('[data-club-next]').forEach(btn=>btn.onclick=()=>openNewGame({eventName:btn.dataset.clubNext}));
+    document.querySelectorAll('[data-game]').forEach(el=>el.onclick=()=>showGameSummary(el.dataset.game));
     return;
   }
   $('#main').innerHTML=`<div class="section-head"><div><h2>Games</h2><div class="muted">Open any match to review, correct, share, or inspect set lineups.</div></div><button class="btn primary" id="gamesNew">+ New Match</button></div><div class="stat-strip" style="margin-bottom:14px"><div class="metric"><span class="muted">Total</span><b>${games.length}</b></div><div class="metric"><span class="muted">Completed</span><b>${completed}</b></div><div class="metric"><span class="muted">In Progress</span><b>${games.length-completed}</b></div><div class="metric"><span class="muted">Record</span><b>${teamRecord(state.activeTeamId).w}-${teamRecord(state.activeTeamId).l}</b></div></div><div class="card"><div class="list">${games.map(g=>matchListItem(g)).join('')||'<div class="empty">No matches yet.</div>'}</div></div>`;
