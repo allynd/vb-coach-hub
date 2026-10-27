@@ -2,6 +2,7 @@ import { openExcelExport } from './excel-export.js';
 import { withPerSetRates, formatPerSetRate } from './player-set-rates.mjs';
 import { loadState, saveState } from './db.js';
 import { refreshActiveTeamFromCloud } from './cloud-sync.js';
+import {teamType,isClubTeam,clubMatchResult} from './team-modes.mjs';
 import { correctionSetNumbers, opponentMissedServeCount, changeOpponentMissedServes } from './match-corrections.mjs';
 
 const $ = (s, root=document) => root.querySelector(s);
@@ -80,6 +81,8 @@ function archivedPlayers(teamId=state.activeTeamId){
   });
 }
 function activeGame(){ return state.games.find(g=>g.id===state.activeGameId && !g.complete) || null; }
+function teamForGame(g){return state.teams.find(t=>t.id===g?.teamId);}
+function matchDateLabel(g){return (isClubTeam(teamForGame(g))&&g.eventName?esc(g.eventName)+' • ':'')+esc(g.date||'');}
 function gameEvents(gameId){ return state.events.filter(e=>e.gameId===gameId); }
 function playerById(id){ return state.players.find(p=>p.id===id); }
 function gameRosterIds(g){ return (g.rosterSnapshot||[]).map(r=>typeof r==='string'?r:r.playerId); }
@@ -110,6 +113,7 @@ function migrateState(stored){
   const s={...structuredClone(DEFAULT),...stored};
   s.settings={...DEFAULT.settings,...(stored?.settings||{})};
   s.teams=Array.isArray(s.teams)?s.teams:[];
+  for(const team of s.teams)team.teamType=teamType(team); // Legacy teams remain School.
   s.players=Array.isArray(s.players)?s.players:[];
   s.games=Array.isArray(s.games)?s.games:[];
   s.events=Array.isArray(s.events)?s.events:[];
@@ -252,6 +256,7 @@ function renderDashboard(){
     ['Digs', [...players].sort((a,b)=>b.s.D-a.s.D)[0]],
   ];
   $('#main').innerHTML=`
+    ${isClubTeam(t)?'<div class="club-mode-indicator">🏐 Club Team • Best of 3 • Tournament Game Days</div>':''}
     <section class="hero">
       <div class="card team-hero-card">
         <div class="team-banner">
@@ -458,7 +463,7 @@ function renderGames(){
 
 function renderTeam(){
   const t=activeTeam();
-  $('#main').innerHTML=`<div class="section-head"><div><h2>My Teams</h2><div class="muted">Coach Hub remembers the active team on this device until you choose another.</div></div>${t?'<button class="btn" id="editTeam">Edit Active Team</button>':''}</div>${t?`<div class="card active-team-card"><div class="team-identity">${teamLogo(t,'hero-logo')}<div><span class="badge visible-badge">Active Team</span><h3>${esc(t.name)}</h3><p class="muted">${esc(t.school||'')} ${t.level?`• ${esc(t.level)}`:''} ${t.season?`• ${esc(t.season)}`:''}</p></div></div><div class="stat-strip"><div class="metric"><span>Players</span><b>${teamPlayers().length}</b></div><div class="metric"><span>Matches</span><b>${state.games.filter(g=>g.teamId===t.id).length}</b></div></div></div>`:'<div class="card empty">No team created yet.</div>'}<div class="grid two" style="margin-top:14px"><div class="card"><div class="section-head"><h3>Teams / Seasons</h3><button class="btn primary compact" id="addTeam">+ Add Team</button></div><div class="team-grid">${state.teams.map(x=>`<button class="team-tile ${x.id===state.activeTeamId?'active':''}" data-team="${x.id}">${teamLogo(x)}<div><strong>${esc(x.name)}</strong><div class="muted">${esc(x.school||'')} ${x.season?`• ${esc(x.season)}`:''}</div></div>${x.id===state.activeTeamId?'<span class="team-check">✓</span>':'<span class="team-switch">Use</span>'}</button>`).join('')||'<div class="muted">Add your first team.</div>'}</div></div><div class="card"><h3>Backup & Share</h3><p class="muted">Keep a portable copy of all teams, logos, rosters, profiles, games, lineups, substitutions and stats.</p><div class="button-row"><button class="btn" id="exportBackup">Export Backup</button><button class="btn" id="importBackup">Import Backup</button>${t?'<button class="btn" id="shareSeason">Share Season Summary</button>':''}</div><hr><div class="notice">A backup is strongly recommended before replacing or resetting the device.</div></div></div><div class="card" style="margin-top:14px"><h3>Game Day Preference</h3><p class="muted">Simple mode keeps only the most-used courtside buttons. Advanced mode adds passing grades, block assists, and setting errors.</p><div class="button-row"><button class="btn ${(state.settings?.statMode||'advanced')==='simple'?'primary':''}" id="useSimpleStats">Simple</button><button class="btn ${(state.settings?.statMode||'advanced')==='advanced'?'primary':''}" id="useAdvancedStats">Advanced</button></div></div>`;
+  $('#main').innerHTML=`<div class="section-head"><div><h2>My Teams</h2><div class="muted">Coach Hub remembers the active team on this device until you choose another.</div></div>${t?'<button class="btn" id="editTeam">Edit Active Team</button>':''}</div>${t?`<div class="card active-team-card"><div class="team-identity">${teamLogo(t,'hero-logo')}<div><span class="badge visible-badge">Active Team • ${teamType(t)==="club"?"Club":"School"}</span><h3>${esc(t.name)}</h3><p class="muted">${esc(t.school||'')} ${t.level?`• ${esc(t.level)}`:''} ${t.season?`• ${esc(t.season)}`:''}</p></div></div><div class="stat-strip"><div class="metric"><span>Players</span><b>${teamPlayers().length}</b></div><div class="metric"><span>Matches</span><b>${state.games.filter(g=>g.teamId===t.id).length}</b></div></div></div>`:'<div class="card empty">No team created yet.</div>'}<div class="grid two" style="margin-top:14px"><div class="card"><div class="section-head"><h3>Teams / Seasons</h3><button class="btn primary compact" id="addTeam">+ Add Team</button></div><div class="team-grid">${state.teams.map(x=>`<button class="team-tile ${x.id===state.activeTeamId?'active':''}" data-team="${x.id}">${teamLogo(x)}<div><strong>${esc(x.name)}</strong><div class="muted">${teamType(x)==="club"?"Club":"School"} • ${esc(x.school||'')} ${x.season?`• ${esc(x.season)}`:''}</div></div>${x.id===state.activeTeamId?'<span class="team-check">✓</span>':'<span class="team-switch">Use</span>'}</button>`).join('')||'<div class="muted">Add your first team.</div>'}</div></div><div class="card"><h3>Backup & Share</h3><p class="muted">Keep a portable copy of all teams, logos, rosters, profiles, games, lineups, substitutions and stats.</p><div class="button-row"><button class="btn" id="exportBackup">Export Backup</button><button class="btn" id="importBackup">Import Backup</button>${t?'<button class="btn" id="shareSeason">Share Season Summary</button>':''}</div><hr><div class="notice">A backup is strongly recommended before replacing or resetting the device.</div></div></div><div class="card" style="margin-top:14px"><h3>Game Day Preference</h3><p class="muted">Simple mode keeps only the most-used courtside buttons. Advanced mode adds passing grades, block assists, and setting errors.</p><div class="button-row"><button class="btn ${(state.settings?.statMode||'advanced')==='simple'?'primary':''}" id="useSimpleStats">Simple</button><button class="btn ${(state.settings?.statMode||'advanced')==='advanced'?'primary':''}" id="useAdvancedStats">Advanced</button></div></div>`;
   $('#editTeam')?.addEventListener('click',()=>openTeamEditor(t));
   $('#addTeam').onclick=()=>openTeamEditor();
   $$('[data-team]').forEach(el=>el.onclick=async()=>{ if(el.dataset.team===state.activeTeamId)return; state.activeTeamId=el.dataset.team;state.activeGameId=null;selectedPlayerId=null;await persist();render(); });
@@ -471,14 +476,18 @@ function renderTeam(){
 
 function openTeamEditor(team=null){
   $('#modalTitle').textContent=team?'Edit Team':'Add Team / Season';
-  $('#modalBody').innerHTML=`<div class="team-logo-editor">${teamLogo(team||{name:'T'},'preview-logo')}<div class="field grow"><label>Team logo</label><input id="teamLogoFile" type="file" accept="image/*"><div class="muted helper">Square images work best. Logos are resized and stored on this device.</div></div></div><div class="form-grid"><div class="field"><label>Team name</label><input id="teamName" value="${esc(team?.name||'')}" placeholder="Tigers"></div><div class="field"><label>School / organization</label><input id="teamSchool" value="${esc(team?.school||'')}" placeholder="Stewartville"></div><div class="field"><label>Level</label><input id="teamLevel" value="${esc(team?.level||'')}" placeholder="Varsity / JV / 8th Grade / Club"></div><div class="field"><label>Season</label><input id="teamSeason" value="${esc(team?.season||new Date().getFullYear())}" placeholder="2026"></div></div>${!team&&state.teams.length?`<div class="field"><label>Carry roster from another team/season</label><select id="copyRoster"><option value="">Start with an empty roster</option>${state.teams.map(x=>`<option value="${x.id}" ${x.id===state.activeTeamId?'selected':''}>${esc(x.name)} • ${esc(x.season||'')}</option>`).join('')}</select><div class="muted helper">Players keep the same career identity while receiving a fresh season record.</div></div>`:''}<button type="button" class="btn primary" id="saveTeam">Save Team</button>`;
+  $('#modalBody').innerHTML=`<div class="team-logo-editor">${teamLogo(team||{name:'T'},'preview-logo')}<div class="field grow"><label>Team logo</label><input id="teamLogoFile" type="file" accept="image/*"><div class="muted helper">Square images work best. Logos are resized and stored on this device.</div></div></div><div class="form-grid"><div class="field"><label>Team type</label><select id="teamType"><option value="school" ${!isClubTeam(team)?"selected":""}>School</option><option value="club" ${isClubTeam(team)?"selected":""}>Club</option></select></div><div class="field"><label>Team name</label><input id="teamName" value="${esc(team?.name||'')}" placeholder="Tigers"></div><div class="field"><label>School / organization</label><input id="teamSchool" value="${esc(team?.school||'')}" placeholder="Stewartville"></div><div class="field"><label>Level</label><input id="teamLevel" value="${esc(team?.level||'')}" placeholder="Varsity / JV / 8th Grade / Club"></div><div class="field"><label>Season</label><input id="teamSeason" value="${esc(team?.season||new Date().getFullYear())}" placeholder="2026"></div></div>${!team&&state.teams.length?`<div class="field"><label>Carry roster from another team/season</label><select id="copyRoster"><option value="">Start with an empty roster</option>${state.teams.map(x=>`<option value="${x.id}" ${x.id===state.activeTeamId?'selected':''}>${esc(x.name)} • ${esc(x.season||'')}</option>`).join('')}</select><div class="muted helper">Players keep the same career identity while receiving a fresh season record.</div></div>`:''}<button type="button" class="btn primary" id="saveTeam">Save Team</button>`;
   $('#saveTeam').onclick=async()=>{
     const name=$('#teamName').value.trim(); if(!name) return alert('Team name is required.');
     let logo=team?.logo||''; const logoFile=$('#teamLogoFile').files[0]; if(logoFile) logo=await fileToDataUrl(logoFile,700,.92,'image/png');
-    if(team){ Object.assign(team,{name,school:$('#teamSchool').value.trim(),level:$('#teamLevel').value.trim(),season:$('#teamSeason').value.trim(),logo}); }
+    const selectedType=$('#teamType').value==='club'?'club':'school';
+    if(team){
+      if(teamType(team)!==selectedType&&state.games.some(g=>g.teamId===team.id))return alert('This team already has match history. Create a separate team to change formats without changing older results.');
+      Object.assign(team,{name,teamType:selectedType,school:$('#teamSchool').value.trim(),level:$('#teamLevel').value.trim(),season:$('#teamSeason').value.trim(),logo});
+    }
     else {
       const sourceTeamId=$('#copyRoster')?.value||'';
-      const t={id:uid('team'),name,school:$('#teamSchool').value.trim(),level:$('#teamLevel').value.trim(),season:$('#teamSeason').value.trim(),logo,createdAt:new Date().toISOString()};
+      const t={id:uid('team'),name,teamType:selectedType,school:$('#teamSchool').value.trim(),level:$('#teamLevel').value.trim(),season:$('#teamSeason').value.trim(),logo,createdAt:new Date().toISOString()};
       state.teams.push(t);
       if(sourceTeamId){
         const source=state.players.filter(p=>p.teamId===sourceTeamId&&!p.archived);
