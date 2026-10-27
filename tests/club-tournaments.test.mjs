@@ -33,3 +33,11 @@ test('bracket groups show only recorded rounds, without inventing seeding',()=>{
  assert.deepEqual(groupClubRounds(games).map(([name])=>name),['Pool Play','Quarterfinal','Semifinal','Unassigned']);
  assert.equal(clubRoundLabel('Unknown'),'Unassigned');
 });
+
+test('display name keeps natural capitalization even if latest match was lowercased',()=>{
+ const games=[
+   match('new','frostbit festival','2026-11-16',[{home:25,away:20}]),
+   match('old','Frostbit Festival','2026-11-15',[{home:25,away:20}])
+ ];
+ assert.equal(groupClubTournaments(games)[0].name,'Frostbit Festival');
+});
