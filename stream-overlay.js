@@ -116,7 +116,7 @@ async function triggerTimeout(side='home'){
   const notice={
     side:side==='away'?'away':'home',
     teamName:side==='away'?(game.opponent||'Opponent'):(team.name||'Team'),
-    expiresAt:new Date(Date.now()+45000).toISOString()
+    expiresAt:new Date(Date.now()+(team?.teamType==='club'?20000:45000)).toISOString()
   };
   localStorage.setItem(timeoutNoticeKey(game),JSON.stringify(notice));
   lastHash='';

@@ -152,6 +152,7 @@ function localTeamToCloud(t,userId){
     school:t.school||null,
     level:t.level||null,
     season:t.season||null,
+    team_type:t.teamType==='club'?'club':'school',
     deleted_at:null
   };
 }
@@ -230,7 +231,7 @@ async function listCloudTeams(userId){
   const supabase=await getClient();
   const {data,error}=await supabase
     .from('team_members')
-    .select('role, team:teams(id,name,school,level,season,owner_id,updated_at)')
+    .select('role, team:teams(id,name,school,level,season,team_type,owner_id,updated_at)')
     .eq('user_id',userId)
     .order('created_at',{ascending:true});
   if(error) throw error;
@@ -256,7 +257,7 @@ async function downloadCloudTeam(teamId){
     const state=await loadState()||{teams:[],players:[],games:[],events:[],settings:{statMode:'advanced'}};
     state.teams=state.teams||[];
     state.players=state.players||[];
-    const localTeam={id:team.id,name:team.name,school:team.school||'',level:team.level||'',season:team.season||'',createdAt:team.created_at};
+    const localTeam={id:team.id,name:team.name,school:team.school||'',level:team.level||'',season:team.season||'',teamType:team.team_type==='club'?'club':'school',createdAt:team.created_at};
     const existingTeam=state.teams.find(t=>t.id===team.id);
     if(existingTeam) Object.assign(existingTeam,{...localTeam,logo:existingTeam.logo||''});
     else state.teams.push(localTeam);

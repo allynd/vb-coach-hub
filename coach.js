@@ -2,6 +2,7 @@ import { openExcelExport } from './excel-export.js';
 import { withPerSetRates, formatPerSetRate } from './player-set-rates.mjs';
 import { loadState, saveState } from './db.js';
 import { refreshActiveTeamFromCloud } from './cloud-sync.js';
+import {teamType,isClubTeam,clubMatchResult} from './team-modes.mjs';
 import { correctionSetNumbers, opponentMissedServeCount, changeOpponentMissedServes } from './match-corrections.mjs';
 
 const $ = (s, root=document) => root.querySelector(s);
@@ -80,6 +81,8 @@ function archivedPlayers(teamId=state.activeTeamId){
   });
 }
 function activeGame(){ return state.games.find(g=>g.id===state.activeGameId && !g.complete) || null; }
+function teamForGame(g){return state.teams.find(t=>t.id===g?.teamId);}
+function matchDateLabel(g){return (isClubTeam(teamForGame(g))&&g.eventName?esc(g.eventName)+' • ':'')+esc(g.date||'');}
 function gameEvents(gameId){ return state.events.filter(e=>e.gameId===gameId); }
 function playerById(id){ return state.players.find(p=>p.id===id); }
 function gameRosterIds(g){ return (g.rosterSnapshot||[]).map(r=>typeof r==='string'?r:r.playerId); }
@@ -110,6 +113,7 @@ function migrateState(stored){
   const s={...structuredClone(DEFAULT),...stored};
   s.settings={...DEFAULT.settings,...(stored?.settings||{})};
   s.teams=Array.isArray(s.teams)?s.teams:[];
+  for(const team of s.teams)team.teamType=teamType(team); // Legacy teams remain School.
   s.players=Array.isArray(s.players)?s.players:[];
   s.games=Array.isArray(s.games)?s.games:[];
   s.events=Array.isArray(s.events)?s.events:[];
@@ -252,6 +256,7 @@ function renderDashboard(){
     ['Digs', [...players].sort((a,b)=>b.s.D-a.s.D)[0]],
   ];
   $('#main').innerHTML=`
+    ${isClubTeam(t)?'<div class="club-mode-indicator">🏐 Club Team • Best of 3 • Tournament Game Days</div>':''}
     <section class="hero">
       <div class="card team-hero-card">
         <div class="team-banner">
@@ -303,11 +308,11 @@ function matchListItem(g){
   if(g.manualRecord){
     const won=Number(g.manualSetsWon)||0,lost=Number(g.manualSetsLost)||0;
     const result=g.complete?(won>lost?'W':'L'):'•';
-    return `<div class="list-item clickable" data-game="${g.id}"><div><strong>${esc(g.opponent||'Opponent')}</strong><div class="sub muted">${esc(g.date)} • Manual result • ${won}-${lost} sets</div></div><strong>${result}${g.complete?` ${won}-${lost}`:''}</strong></div>`;
+    return `<div class="list-item clickable" data-game="${g.id}"><div><strong>${esc(g.opponent||'Opponent')}</strong><div class="sub muted">${matchDateLabel(g)} • Manual result • ${won}-${lost} sets</div></div><strong>${result}${g.complete?` ${won}-${lost}`:''}</strong></div>`;
   }
   const us=g.sets.filter(s=>s.home>s.away).length, them=g.sets.filter(s=>s.away>s.home).length;
   const result=g.complete?(us>them?'W':'L'):'•';
-  return `<div class="list-item clickable" data-game="${g.id}"><div><strong>${esc(g.opponent||'Opponent')}</strong><div class="sub muted">${esc(g.date)} • ${g.sets.map(s=>`${s.home}-${s.away}`).join(', ')||'No sets completed'}</div></div><strong>${result}${g.complete?` ${us}-${them}`:''}</strong></div>`;
+  return `<div class="list-item clickable" data-game="${g.id}"><div><strong>${esc(g.opponent||'Opponent')}</strong><div class="sub muted">${matchDateLabel(g)} • ${g.sets.map(s=>`${s.home}-${s.away}`).join(', ')||'No sets completed'}</div></div><strong>${result}${g.complete?` ${us}-${them}`:''}</strong></div>`;
 }
 
 function renderRoster(){
@@ -451,6 +456,33 @@ function renderStats(){
 function renderGames(){
   const games=state.games.filter(g=>g.teamId===state.activeTeamId).sort((a,b)=>(b.date||'').localeCompare(a.date||'') || (b.createdAt||'').localeCompare(a.createdAt||''));
   const completed=games.filter(g=>g.complete).length;
+  if(isClubTeam(activeTeam())){
+    const groups=new Map();
+    for(const g of games){
+      const event=(g.eventName||'').trim()||'Unassigned tournament';
+      if(!groups.has(event))groups.set(event,new Map());
+      const dates=groups.get(event);
+      const date=g.date||'No date';
+      if(!dates.has(date))dates.set(date,[]);
+      dates.get(date).push(g);
+    }
+    let body='';
+    for(const [event,days] of groups){
+      body+='<section class="card club-event-card"><div class="section-head"><h3>🏆 '+esc(event)+'</h3><button type="button" class="btn compact" data-club-next="'+esc(event==='Unassigned tournament'?'':event)+'">+ Match</button></div>';
+      for(const [date,matches] of days){
+        body+='<div class="club-event-day"><strong>'+esc(date)+'</strong><span class="muted">'+matches.length+' match'+(matches.length===1?'':'es')+'</span></div>';
+        body+='<div class="list">'+matches.map(matchListItem).join('')+'</div>';
+      }
+      body+='</section>';
+    }
+    $('#main').innerHTML='<div class="section-head"><div><h2>Club Game Days</h2><div class="muted">Multiple matches per tournament, including multi-day events. Each match has separate stats and a best-of-three result.</div></div><button class="btn primary" id="gamesNew">+ New Match</button></div>'
+      +'<div class="stat-strip" style="margin-bottom:14px"><div class="metric"><span class="muted">Tournaments</span><b>'+groups.size+'</b></div><div class="metric"><span class="muted">Matches</span><b>'+games.length+'</b></div><div class="metric"><span class="muted">Completed</span><b>'+completed+'</b></div><div class="metric"><span class="muted">Record</span><b>'+teamRecord(state.activeTeamId).w+'-'+teamRecord(state.activeTeamId).l+'</b></div></div>'
+      +'<div class="club-event-groups">'+(body||'<div class="card empty">Create a match to begin your first tournament.</div>')+'</div>';
+    $('#gamesNew').onclick=()=>openNewGame();
+    document.querySelectorAll('[data-club-next]').forEach(btn=>btn.onclick=()=>openNewGame({eventName:btn.dataset.clubNext}));
+    document.querySelectorAll('[data-game]').forEach(el=>el.onclick=()=>showGameSummary(el.dataset.game));
+    return;
+  }
   $('#main').innerHTML=`<div class="section-head"><div><h2>Games</h2><div class="muted">Open any match to review, correct, share, or inspect set lineups.</div></div><button class="btn primary" id="gamesNew">+ New Match</button></div><div class="stat-strip" style="margin-bottom:14px"><div class="metric"><span class="muted">Total</span><b>${games.length}</b></div><div class="metric"><span class="muted">Completed</span><b>${completed}</b></div><div class="metric"><span class="muted">In Progress</span><b>${games.length-completed}</b></div><div class="metric"><span class="muted">Record</span><b>${teamRecord(state.activeTeamId).w}-${teamRecord(state.activeTeamId).l}</b></div></div><div class="card"><div class="list">${games.map(g=>matchListItem(g)).join('')||'<div class="empty">No matches yet.</div>'}</div></div>`;
   $('#gamesNew').onclick=openNewGame;
   $$('[data-game]').forEach(el=>el.onclick=()=>showGameSummary(el.dataset.game));
@@ -458,7 +490,7 @@ function renderGames(){
 
 function renderTeam(){
   const t=activeTeam();
-  $('#main').innerHTML=`<div class="section-head"><div><h2>My Teams</h2><div class="muted">Coach Hub remembers the active team on this device until you choose another.</div></div>${t?'<button class="btn" id="editTeam">Edit Active Team</button>':''}</div>${t?`<div class="card active-team-card"><div class="team-identity">${teamLogo(t,'hero-logo')}<div><span class="badge visible-badge">Active Team</span><h3>${esc(t.name)}</h3><p class="muted">${esc(t.school||'')} ${t.level?`• ${esc(t.level)}`:''} ${t.season?`• ${esc(t.season)}`:''}</p></div></div><div class="stat-strip"><div class="metric"><span>Players</span><b>${teamPlayers().length}</b></div><div class="metric"><span>Matches</span><b>${state.games.filter(g=>g.teamId===t.id).length}</b></div></div></div>`:'<div class="card empty">No team created yet.</div>'}<div class="grid two" style="margin-top:14px"><div class="card"><div class="section-head"><h3>Teams / Seasons</h3><button class="btn primary compact" id="addTeam">+ Add Team</button></div><div class="team-grid">${state.teams.map(x=>`<button class="team-tile ${x.id===state.activeTeamId?'active':''}" data-team="${x.id}">${teamLogo(x)}<div><strong>${esc(x.name)}</strong><div class="muted">${esc(x.school||'')} ${x.season?`• ${esc(x.season)}`:''}</div></div>${x.id===state.activeTeamId?'<span class="team-check">✓</span>':'<span class="team-switch">Use</span>'}</button>`).join('')||'<div class="muted">Add your first team.</div>'}</div></div><div class="card"><h3>Backup & Share</h3><p class="muted">Keep a portable copy of all teams, logos, rosters, profiles, games, lineups, substitutions and stats.</p><div class="button-row"><button class="btn" id="exportBackup">Export Backup</button><button class="btn" id="importBackup">Import Backup</button>${t?'<button class="btn" id="shareSeason">Share Season Summary</button>':''}</div><hr><div class="notice">A backup is strongly recommended before replacing or resetting the device.</div></div></div><div class="card" style="margin-top:14px"><h3>Game Day Preference</h3><p class="muted">Simple mode keeps only the most-used courtside buttons. Advanced mode adds passing grades, block assists, and setting errors.</p><div class="button-row"><button class="btn ${(state.settings?.statMode||'advanced')==='simple'?'primary':''}" id="useSimpleStats">Simple</button><button class="btn ${(state.settings?.statMode||'advanced')==='advanced'?'primary':''}" id="useAdvancedStats">Advanced</button></div></div>`;
+  $('#main').innerHTML=`<div class="section-head"><div><h2>My Teams</h2><div class="muted">Coach Hub remembers the active team on this device until you choose another.</div></div>${t?'<button class="btn" id="editTeam">Edit Active Team</button>':''}</div>${t?`<div class="card active-team-card"><div class="team-identity">${teamLogo(t,'hero-logo')}<div><span class="badge visible-badge">Active Team • ${teamType(t)==="club"?"Club":"School"}</span><h3>${esc(t.name)}</h3><p class="muted">${esc(t.school||'')} ${t.level?`• ${esc(t.level)}`:''} ${t.season?`• ${esc(t.season)}`:''}</p></div></div><div class="stat-strip"><div class="metric"><span>Players</span><b>${teamPlayers().length}</b></div><div class="metric"><span>Matches</span><b>${state.games.filter(g=>g.teamId===t.id).length}</b></div></div></div>`:'<div class="card empty">No team created yet.</div>'}<div class="grid two" style="margin-top:14px"><div class="card"><div class="section-head"><h3>Teams / Seasons</h3><button class="btn primary compact" id="addTeam">+ Add Team</button></div><div class="team-grid">${state.teams.map(x=>`<button class="team-tile ${x.id===state.activeTeamId?'active':''}" data-team="${x.id}">${teamLogo(x)}<div><strong>${esc(x.name)}</strong><div class="muted">${teamType(x)==="club"?"Club":"School"} • ${esc(x.school||'')} ${x.season?`• ${esc(x.season)}`:''}</div></div>${x.id===state.activeTeamId?'<span class="team-check">✓</span>':'<span class="team-switch">Use</span>'}</button>`).join('')||'<div class="muted">Add your first team.</div>'}</div></div><div class="card"><h3>Backup & Share</h3><p class="muted">Keep a portable copy of all teams, logos, rosters, profiles, games, lineups, substitutions and stats.</p><div class="button-row"><button class="btn" id="exportBackup">Export Backup</button><button class="btn" id="importBackup">Import Backup</button>${t?'<button class="btn" id="shareSeason">Share Season Summary</button>':''}</div><hr><div class="notice">A backup is strongly recommended before replacing or resetting the device.</div></div></div><div class="card" style="margin-top:14px"><h3>Game Day Preference</h3><p class="muted">Simple mode keeps only the most-used courtside buttons. Advanced mode adds passing grades, block assists, and setting errors.</p><div class="button-row"><button class="btn ${(state.settings?.statMode||'advanced')==='simple'?'primary':''}" id="useSimpleStats">Simple</button><button class="btn ${(state.settings?.statMode||'advanced')==='advanced'?'primary':''}" id="useAdvancedStats">Advanced</button></div></div>`;
   $('#editTeam')?.addEventListener('click',()=>openTeamEditor(t));
   $('#addTeam').onclick=()=>openTeamEditor();
   $$('[data-team]').forEach(el=>el.onclick=async()=>{ if(el.dataset.team===state.activeTeamId)return; state.activeTeamId=el.dataset.team;state.activeGameId=null;selectedPlayerId=null;await persist();render(); });
@@ -471,14 +503,18 @@ function renderTeam(){
 
 function openTeamEditor(team=null){
   $('#modalTitle').textContent=team?'Edit Team':'Add Team / Season';
-  $('#modalBody').innerHTML=`<div class="team-logo-editor">${teamLogo(team||{name:'T'},'preview-logo')}<div class="field grow"><label>Team logo</label><input id="teamLogoFile" type="file" accept="image/*"><div class="muted helper">Square images work best. Logos are resized and stored on this device.</div></div></div><div class="form-grid"><div class="field"><label>Team name</label><input id="teamName" value="${esc(team?.name||'')}" placeholder="Tigers"></div><div class="field"><label>School / organization</label><input id="teamSchool" value="${esc(team?.school||'')}" placeholder="Stewartville"></div><div class="field"><label>Level</label><input id="teamLevel" value="${esc(team?.level||'')}" placeholder="Varsity / JV / 8th Grade / Club"></div><div class="field"><label>Season</label><input id="teamSeason" value="${esc(team?.season||new Date().getFullYear())}" placeholder="2026"></div></div>${!team&&state.teams.length?`<div class="field"><label>Carry roster from another team/season</label><select id="copyRoster"><option value="">Start with an empty roster</option>${state.teams.map(x=>`<option value="${x.id}" ${x.id===state.activeTeamId?'selected':''}>${esc(x.name)} • ${esc(x.season||'')}</option>`).join('')}</select><div class="muted helper">Players keep the same career identity while receiving a fresh season record.</div></div>`:''}<button type="button" class="btn primary" id="saveTeam">Save Team</button>`;
+  $('#modalBody').innerHTML=`<div class="team-logo-editor">${teamLogo(team||{name:'T'},'preview-logo')}<div class="field grow"><label>Team logo</label><input id="teamLogoFile" type="file" accept="image/*"><div class="muted helper">Square images work best. Logos are resized and stored on this device.</div></div></div><div class="form-grid"><div class="field"><label>Team type</label><select id="teamType"><option value="school" ${!isClubTeam(team)?"selected":""}>School</option><option value="club" ${isClubTeam(team)?"selected":""}>Club</option></select></div><div class="field"><label>Team name</label><input id="teamName" value="${esc(team?.name||'')}" placeholder="Tigers"></div><div class="field"><label>School / organization</label><input id="teamSchool" value="${esc(team?.school||'')}" placeholder="Stewartville"></div><div class="field"><label>Level</label><input id="teamLevel" value="${esc(team?.level||'')}" placeholder="Varsity / JV / 8th Grade / Club"></div><div class="field"><label>Season</label><input id="teamSeason" value="${esc(team?.season||new Date().getFullYear())}" placeholder="2026"></div></div>${!team&&state.teams.length?`<div class="field"><label>Carry roster from another team/season</label><select id="copyRoster"><option value="">Start with an empty roster</option>${state.teams.map(x=>`<option value="${x.id}" ${x.id===state.activeTeamId?'selected':''}>${esc(x.name)} • ${esc(x.season||'')}</option>`).join('')}</select><div class="muted helper">Players keep the same career identity while receiving a fresh season record.</div></div>`:''}<button type="button" class="btn primary" id="saveTeam">Save Team</button>`;
   $('#saveTeam').onclick=async()=>{
     const name=$('#teamName').value.trim(); if(!name) return alert('Team name is required.');
     let logo=team?.logo||''; const logoFile=$('#teamLogoFile').files[0]; if(logoFile) logo=await fileToDataUrl(logoFile,700,.92,'image/png');
-    if(team){ Object.assign(team,{name,school:$('#teamSchool').value.trim(),level:$('#teamLevel').value.trim(),season:$('#teamSeason').value.trim(),logo}); }
+    const selectedType=$('#teamType').value==='club'?'club':'school';
+    if(team){
+      if(teamType(team)!==selectedType&&state.games.some(g=>g.teamId===team.id))return alert('This team already has match history. Create a separate team to change formats without changing older results.');
+      Object.assign(team,{name,teamType:selectedType,school:$('#teamSchool').value.trim(),level:$('#teamLevel').value.trim(),season:$('#teamSeason').value.trim(),logo});
+    }
     else {
       const sourceTeamId=$('#copyRoster')?.value||'';
-      const t={id:uid('team'),name,school:$('#teamSchool').value.trim(),level:$('#teamLevel').value.trim(),season:$('#teamSeason').value.trim(),logo,createdAt:new Date().toISOString()};
+      const t={id:uid('team'),name,teamType:selectedType,school:$('#teamSchool').value.trim(),level:$('#teamLevel').value.trim(),season:$('#teamSeason').value.trim(),logo,createdAt:new Date().toISOString()};
       state.teams.push(t);
       if(sourceTeamId){
         const source=state.players.filter(p=>p.teamId===sourceTeamId&&!p.archived);
@@ -494,12 +530,26 @@ function openTeamEditor(team=null){
 function openPlayerEditor(player=null){
   const t=activeTeam(); if(!t)return openTeamEditor();
   $('#modalTitle').textContent=player?'Edit Player':'Add Player';
-  $('#modalBody').innerHTML=`<div class="field"><label>Player photo</label><input id="pPhoto" type="file" accept="image/*" capture="environment"></div><div class="form-grid"><div class="field"><label>First name</label><input id="pFirst" value="${esc(player?.firstName||'')}"></div><div class="field"><label>Last name</label><input id="pLast" value="${esc(player?.lastName||'')}"></div><div class="field"><label>Jersey #</label><input id="pJersey" inputmode="numeric" value="${esc(player?.jersey||'')}"></div><div class="field"><label>Primary position</label><select id="pPos">${['','OH','OPP','MB','S','DS','L'].map(x=>`<option ${player?.position===x?'selected':''}>${x}</option>`).join('')}</select><div class="muted helper">Use L or DS here for players who should appear in the Libero Sub list.</div></div><div class="field"><label>Secondary position</label><select id="pPos2">${['','OH','OPP','MB','S','DS','L'].map(x=>`<option ${player?.secondaryPosition===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>Height</label><input id="pHeight" value="${esc(player?.height||'')}" placeholder="5'8\""></div><div class="field"><label>Graduation year</label><input id="pGrad" inputmode="numeric" value="${esc(player?.gradYear||'')}"></div><div class="field"><label>Dominant hand</label><select id="pHand"><option></option><option ${player?.hand==='Right'?'selected':''}>Right</option><option ${player?.hand==='Left'?'selected':''}>Left</option></select></div></div><div class="field"><label>Coach notes</label><textarea id="pNotes">${esc(player?.notes||'')}</textarea></div><div class="button-row"><button type="button" class="btn primary" id="savePlayer">Save Player</button>${player&&!player.archived?'<button type="button" class="btn danger" id="archivePlayer">Archive Player</button>':''}${player?.archived?'<button type="button" class="btn success" id="restoreEditorPlayer">Restore to Roster</button>':''}</div>`;
+  const importChoices=player?[]:state.players.filter(p=>p.teamId!==t.id).filter(p=>!state.players.some(q=>q.teamId===t.id&&(q.personId||q.id)===(p.personId||p.id)));
+  const importOptions=importChoices.map(p=>{
+    const source=state.teams.find(t=>t.id===p.teamId);
+    return `<option value="${esc(p.id)}">${esc(p.firstName)} ${esc(p.lastName)} • ${esc(source?.name||'Team')} (${teamType(source)==='club'?'Club':'School'})</option>`;
+  }).join('');
+  $('#modalBody').innerHTML=`${!player?`<div class="field"><label>Add from existing School or Club team</label><select id="pImportExisting"><option value="">New player</option>${importOptions}</select><div class="muted helper">Links the player's career totals. Team jersey and position can be edited independently.</div></div>`:''}<div class="field"><label>Player photo</label><input id="pPhoto" type="file" accept="image/*" capture="environment"></div><div class="form-grid"><div class="field"><label>First name</label><input id="pFirst" value="${esc(player?.firstName||'')}"></div><div class="field"><label>Last name</label><input id="pLast" value="${esc(player?.lastName||'')}"></div><div class="field"><label>Jersey #</label><input id="pJersey" inputmode="numeric" value="${esc(player?.jersey||'')}"></div><div class="field"><label>Primary position</label><select id="pPos">${['','OH','OPP','MB','S','DS','L'].map(x=>`<option ${player?.position===x?'selected':''}>${x}</option>`).join('')}</select><div class="muted helper">Use L or DS here for players who should appear in the Libero Sub list.</div></div><div class="field"><label>Secondary position</label><select id="pPos2">${['','OH','OPP','MB','S','DS','L'].map(x=>`<option ${player?.secondaryPosition===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>Height</label><input id="pHeight" value="${esc(player?.height||'')}" placeholder="5'8\""></div><div class="field"><label>Graduation year</label><input id="pGrad" inputmode="numeric" value="${esc(player?.gradYear||'')}"></div><div class="field"><label>Dominant hand</label><select id="pHand"><option></option><option ${player?.hand==='Right'?'selected':''}>Right</option><option ${player?.hand==='Left'?'selected':''}>Left</option></select></div></div><div class="field"><label>Coach notes</label><textarea id="pNotes">${esc(player?.notes||'')}</textarea></div><div class="button-row"><button type="button" class="btn primary" id="savePlayer">Save Player</button>${player&&!player.archived?'<button type="button" class="btn danger" id="archivePlayer">Archive Player</button>':''}${player?.archived?'<button type="button" class="btn success" id="restoreEditorPlayer">Restore to Roster</button>':''}</div>`;
+  $('#pImportExisting')?.addEventListener('change',()=>{
+    const linked=state.players.find(p=>p.id===$('#pImportExisting')?.value);
+    if(!linked)return;
+    for(const [id,val] of [['pFirst',linked.firstName],['pLast',linked.lastName],['pJersey',linked.jersey],['pPos',linked.position],['pPos2',linked.secondaryPosition],['pHeight',linked.height],['pGrad',linked.gradYear],['pHand',linked.hand],['pNotes',linked.notes]]){
+      const input=$('#'+id);if(input)input.value=val||'';
+    }
+  });
   $('#savePlayer').onclick=async()=>{
     const firstName=$('#pFirst').value.trim(),lastName=$('#pLast').value.trim(); if(!firstName&&!lastName)return alert('Enter a player name.');
-    let photo=player?.photo||''; const file=$('#pPhoto').files[0]; if(file)photo=await fileToDataUrl(file,640,.82);
+    const linked=player?null:state.players.find(p=>p.id===$('#pImportExisting')?.value);
+    if(linked&&state.players.some(p=>p.teamId===t.id&&(p.personId||p.id)===(linked.personId||linked.id)))return alert('That player is already on this team.');
+    let photo=player?.photo||linked?.photo||''; const file=$('#pPhoto').files[0]; if(file)photo=await fileToDataUrl(file,640,.82);
     const data={firstName,lastName,jersey:$('#pJersey').value.trim(),position:$('#pPos').value,secondaryPosition:$('#pPos2').value,height:$('#pHeight').value.trim(),gradYear:$('#pGrad').value.trim(),hand:$('#pHand').value,notes:$('#pNotes').value.trim(),photo};
-    if(player)Object.assign(player,data);else{const id=uid('player');state.players.push({id,personId:uid('person'),teamId:t.id,archived:false,...data});}
+    if(player)Object.assign(player,data);else{const id=uid('player');state.players.push({id,personId:linked?(linked.personId||linked.id):uid('person'),teamId:t.id,archived:false,...data});}
     await persist();$('#modal').close();render();
   };
   $('#archivePlayer')?.addEventListener('click',()=>archivePlayer(player.id));
@@ -512,14 +562,17 @@ async function fileToDataUrl(file,max=640,quality=.82,mime='image/jpeg'){
   return new Promise(resolve=>{const img=new Image();img.onload=()=>{const scale=Math.min(1,max/Math.max(img.width,img.height));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL(mime,quality));};img.onerror=()=>resolve(raw);img.src=raw;});
 }
 
-function openNewGame(){
+function openNewGame(prefill={}){
   const players=teamPlayers(); if(players.length<6){alert('Add at least six players to the roster before starting a match.');return setView('roster');}
+  const team=activeTeam(),club=isClubTeam(team);
+  const eventPrefill=typeof prefill?.eventName==='string'?prefill.eventName:'';
+  const recentEvents=[...new Set(state.games.filter(g=>g.teamId===team.id&&g.eventName).map(g=>g.eventName))];
   $('#modalTitle').textContent='New Match';
-  $('#modalBody').innerHTML=`<div class="form-grid"><div class="field"><label>Opponent</label><input id="gOpponent" placeholder="Opponent"></div><div class="field"><label>Date</label><input id="gDate" type="date" value="${today()}"></div></div><div class="field"><label>Active roster today</label><div class="list roster-checklist">${players.map(p=>`<label class="list-item"><div class="player-main">${avatar(p)}<div>${playerLabel(p)}<div class="muted">${esc(p.position||'')}</div></div></div><input class="roster-check" type="checkbox" data-active-player="${p.id}" checked></label>`).join('')}</div></div><button type="button" class="btn primary" id="startMatch">Continue to Set 1 Lineup</button>`;
+  $('#modalBody').innerHTML=`<div class="form-grid"><div class="field"><label>Opponent</label><input id="gOpponent" placeholder="Opponent"></div><div class="field"><label>Date</label><input id="gDate" type="date" value="${today()}"></div></div>${club?`<div class="field"><label>Tournament / Event</label><input id="gEventName" list="clubEventNames" value="${esc(eventPrefill)}" placeholder="Weekend tournament name"><datalist id="clubEventNames">${recentEvents.map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist><div class="muted helper">Reuse the event name on additional matches, including other dates.</div></div><div class="notice" style="margin-bottom:12px">Club matches are best of 3 sets (first to win 2).</div>`:'' }<div class="field"><label>Active roster today</label><div class="list roster-checklist">${players.map(p=>`<label class="list-item"><div class="player-main">${avatar(p)}<div>${playerLabel(p)}<div class="muted">${esc(p.position||'')}</div></div></div><input class="roster-check" type="checkbox" data-active-player="${p.id}" checked></label>`).join('')}</div></div><button type="button" class="btn primary" id="startMatch">Continue to Set 1 Lineup</button>`;
   $('#startMatch').onclick=async()=>{
     const roster=$$('[data-active-player]').filter(x=>x.checked).map(x=>x.dataset.activePlayer); if(roster.length<6)return alert('Select at least six active players.');
     const rosterSnapshot=roster.map(id=>{const p=playerById(id);return {playerId:id,jersey:p?.jersey||'',firstName:p?.firstName||'',lastName:p?.lastName||'',position:p?.position||''};});
-    const g={id:uid('game'),teamId:state.activeTeamId,opponent:$('#gOpponent').value.trim()||'Opponent',date:$('#gDate').value||today(),currentSet:1,homeScore:0,awayScore:0,sets:[],rosterSnapshot,setLineups:{},complete:false,createdAt:new Date().toISOString()};
+    const g={id:uid('game'),teamId:state.activeTeamId,opponent:$('#gOpponent').value.trim()||'Opponent',date:$('#gDate').value||today(),eventName:club?$('#gEventName').value.trim():'',currentSet:1,homeScore:0,awayScore:0,sets:[],rosterSnapshot,setLineups:{},complete:false,createdAt:new Date().toISOString()};
     state.games.push(g);state.activeGameId=g.id;selectedPlayerId=null;await persist();$('#modal').close();openLineupEditor(g,1,{afterSave:()=>setView('gameday')});
   };
   $('#modal').showModal();
@@ -736,8 +789,15 @@ async function undoEvent(){
 }
 
 async function endSet(){
-  const g=activeGame();if(!g)return;if(g.homeScore===g.awayScore&&!confirm('The set is tied. End it anyway?'))return;
-  g.sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});g.currentSet++;g.homeScore=0;g.awayScore=0;selectedPlayerId=null;await persist();openLineupEditor(g,g.currentSet,{afterSave:()=>setView('gameday')});
+  const g=activeGame();if(!g)return;if(g.homeScore===g.awayScore&&(isClubTeam(teamForGame(g))||!confirm('The set is tied. End it anyway?'))){if(isClubTeam(teamForGame(g)))alert('A club set must have a winner before it can end.');return;}
+  if(isClubTeam(teamForGame(g))&&g.currentSet>3)return alert('Club matches cannot exceed three sets.');
+  g.sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});
+  if(isClubTeam(teamForGame(g))&&clubMatchResult(g.sets).done){
+    g.complete=true;g.completedAt=new Date().toISOString();state.activeGameId=null;selectedPlayerId=null;
+    await persist();render();showGameSummary(g.id);return;
+  }
+  g.currentSet++;g.homeScore=0;g.awayScore=0;selectedPlayerId=null;
+  await persist();openLineupEditor(g,g.currentSet,{afterSave:()=>setView('gameday')});
 }
 
 async function createStreamMatch(data={}){
@@ -749,7 +809,7 @@ async function createStreamMatch(data={}){
   const firstServe=data.startingServe==='away'?'away':'home';
   const g={
     id:uid('game'),teamId:t.id,opponent:String(data.opponent||'').trim()||'Opponent',
-    date:data.date||today(),location:String(data.location||'').trim(),siteType:data.siteType||'home',
+    date:data.date||today(),eventName:isClubTeam(t)?String(data.eventName||'').trim():'',location:String(data.location||'').trim(),siteType:data.siteType||'home',
     conferenceType:data.conferenceType||'',currentSet:1,homeScore:0,awayScore:0,sets:[],
     rosterSnapshot,setLineups:{},complete:false,streamOnly:true,
     streamStartServeBySet:{'1':firstServe},streamServeBySet:{'1':firstServe},
@@ -815,9 +875,14 @@ async function undoStreamScore(){
 
 async function endSetForStream(){
   const g=activeGame();if(!g)return false;
-  if(g.homeScore===g.awayScore&&!confirm('The set is tied. End it anyway?'))return false;
+  if(g.homeScore===g.awayScore&&(isClubTeam(teamForGame(g))||!confirm('The set is tied. End it anyway?'))){if(isClubTeam(teamForGame(g)))alert('A club set must have a winner before it can end.');return false;}
   const finishedSet=Number(g.currentSet)||1;
+  if(isClubTeam(teamForGame(g))&&finishedSet>3){alert('Club matches cannot exceed three sets.');return false;}
   g.sets.push({set:finishedSet,home:g.homeScore,away:g.awayScore});
+  if(isClubTeam(teamForGame(g))&&clubMatchResult(g.sets).done){
+    g.complete=true;g.completedAt=new Date().toISOString();state.activeGameId=null;selectedPlayerId=null;
+    await persist();render();return true;
+  }
   g.currentSet=finishedSet+1;g.homeScore=0;g.awayScore=0;selectedPlayerId=null;
   if(g.streamOnly){
     g.streamStartServeBySet=g.streamStartServeBySet||{};
@@ -832,6 +897,18 @@ async function endSetForStream(){
 
 async function endMatch(){
   const g=activeGame();if(!g)return;
+  if(isClubTeam(teamForGame(g))){
+    const sets=[...g.sets];
+    if(g.homeScore||g.awayScore){
+      if(g.homeScore===g.awayScore)return alert('The current club set is tied. Finish it before ending the match.');
+      if(g.currentSet>3)return alert('Club matches cannot exceed three sets.');
+      sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});
+    }
+    if(!clubMatchResult(sets).done)return alert('Club matches end only when a team wins 2 sets (2–0 or 2–1).');
+    if(!confirm('Complete this best-of-three club match?'))return;
+    g.sets=sets;g.complete=true;g.completedAt=new Date().toISOString();state.activeGameId=null;selectedPlayerId=null;
+    await persist();render();showGameSummary(g.id);return;
+  }
   if((g.homeScore||g.awayScore)&&confirm(`Save current Set ${g.currentSet} as ${g.homeScore}-${g.awayScore}?`))g.sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});
   if(!confirm('Mark this match complete? You can still view all saved stats, lineups and substitutions afterward.'))return;
   g.complete=true;g.completedAt=new Date().toISOString();state.activeGameId=null;selectedPlayerId=null;await persist();showGameSummary(g.id);render();
@@ -847,7 +924,7 @@ function showGameSummary(gameId){
   const players=correctionPlayers(g);
   const ev=gameEvents(g.id);
   $('#modalTitle').textContent=`${state.teams.find(t=>t.id===g.teamId)?.name||'Team'} vs ${g.opponent}`;
-  $('#modalBody').innerHTML=`${g.streamOnly?'<div class="notice"><strong>Stream-only match</strong><div class="muted">The score and result are saved. Player stats can be added now or later without changing the recorded score.</div></div>':''}<div class="stat-strip" style="margin-top:${g.streamOnly?'12px':'0'}"><div class="metric"><span>Date</span><b style="font-size:16px">${esc(g.date)}</b></div><div class="metric"><span>Sets</span><b style="font-size:16px">${g.sets.map(s=>`${s.home}-${s.away}`).join(', ')||'—'}</b></div></div>${g.streamOnly?'':'<hr><h3>Set Lineups</h3>'+lineupSummaryHtml(g)}<hr>${matchDefensiveHtml(g,ev)}<hr><div class="table-wrap"><table><thead><tr><th>Player</th><th>SP</th><th>K</th><th>K/S</th><th>D/S</th><th>B/S</th><th>E</th><th>Attempts</th><th>2-Hand Tips</th><th>Total Attacks</th><th>HIT%</th><th>ACE</th><th>BS</th><th>BA</th><th>BE</th><th>AST</th><th>DIG</th><th>DE</th><th>BHE</th><th>OOS</th><th>PASS</th><th>Receive Errors</th><th>Overpasses</th><th>Receive Error %</th><th>Receive Success %</th><th>Defensive Success %</th></tr></thead><tbody>${players.map(p=>{const s=matchPlayerStats(p,g);return `<tr><td>${playerLabel(p)}</td><td>${s.SP}</td><td>${s.K}</td><td>${formatPerSetRate(s.KPS)}</td><td>${formatPerSetRate(s.DPS)}</td><td>${formatPerSetRate(s.BPS)}</td><td>${s.E}</td><td>${s.ATTEMPTS}</td><td>${s.TIPS}</td><td>${s.ATT}</td><td>${fmtPct(s.HIT)}</td><td>${s.ACE}</td><td>${s.BS}</td><td>${s.BA}</td><td>${s.BE}</td><td>${s.A}</td><td>${s.D}</td><td>${s.DE}</td><td>${s.BHE}</td><td>${s.OOS}</td><td>${s.PASS.toFixed(2)}</td><td>${s.RE}</td><td>${s.OVERPASS}</td><td>${defensivePct(s.RECEIVE_ERROR)}</td><td>${defensivePct(s.RECEIVE_SUCCESS)}</td><td>${defensivePct(s.DEFENSE_SUCCESS)}</td></tr>`}).join('')||'<tr><td colspan="26" class="muted">No player stats attached yet.</td></tr>'}</tbody></table></div><hr><div class="button-row"><button type="button" class="btn" id="excelMatchStats">Export Excel</button><button type="button" class="btn primary" id="shareSummary">Share / Email</button><button type="button" class="btn" id="editMatch">${g.streamOnly||g.manualRecord?'Add / Correct Stats (Classic)':'Edit Match / Stats (Classic)'}</button><button type="button" class="btn primary" id="openMatchSheets">Interactive Stat Sheets</button></div>`;
+  $('#modalBody').innerHTML=`${isClubTeam(teamForGame(g))&&g.eventName?`<div class="notice">🏆 ${esc(g.eventName)}</div>`:''}${g.streamOnly?'<div class="notice"><strong>Stream-only match</strong><div class="muted">The score and result are saved. Player stats can be added now or later without changing the recorded score.</div></div>':''}<div class="stat-strip" style="margin-top:${g.streamOnly?'12px':'0'}"><div class="metric"><span>Date</span><b style="font-size:16px">${esc(g.date)}</b></div><div class="metric"><span>Sets</span><b style="font-size:16px">${g.sets.map(s=>`${s.home}-${s.away}`).join(', ')||'—'}</b></div></div>${g.streamOnly?'':'<hr><h3>Set Lineups</h3>'+lineupSummaryHtml(g)}<hr>${matchDefensiveHtml(g,ev)}<hr><div class="table-wrap"><table><thead><tr><th>Player</th><th>SP</th><th>K</th><th>K/S</th><th>D/S</th><th>B/S</th><th>E</th><th>Attempts</th><th>2-Hand Tips</th><th>Total Attacks</th><th>HIT%</th><th>ACE</th><th>BS</th><th>BA</th><th>BE</th><th>AST</th><th>DIG</th><th>DE</th><th>BHE</th><th>OOS</th><th>PASS</th><th>Receive Errors</th><th>Overpasses</th><th>Receive Error %</th><th>Receive Success %</th><th>Defensive Success %</th></tr></thead><tbody>${players.map(p=>{const s=matchPlayerStats(p,g);return `<tr><td>${playerLabel(p)}</td><td>${s.SP}</td><td>${s.K}</td><td>${formatPerSetRate(s.KPS)}</td><td>${formatPerSetRate(s.DPS)}</td><td>${formatPerSetRate(s.BPS)}</td><td>${s.E}</td><td>${s.ATTEMPTS}</td><td>${s.TIPS}</td><td>${s.ATT}</td><td>${fmtPct(s.HIT)}</td><td>${s.ACE}</td><td>${s.BS}</td><td>${s.BA}</td><td>${s.BE}</td><td>${s.A}</td><td>${s.D}</td><td>${s.DE}</td><td>${s.BHE}</td><td>${s.OOS}</td><td>${s.PASS.toFixed(2)}</td><td>${s.RE}</td><td>${s.OVERPASS}</td><td>${defensivePct(s.RECEIVE_ERROR)}</td><td>${defensivePct(s.RECEIVE_SUCCESS)}</td><td>${defensivePct(s.DEFENSE_SUCCESS)}</td></tr>`}).join('')||'<tr><td colspan="26" class="muted">No player stats attached yet.</td></tr>'}</tbody></table></div><hr><div class="button-row"><button type="button" class="btn" id="excelMatchStats">Export Excel</button><button type="button" class="btn primary" id="shareSummary">Share / Email</button><button type="button" class="btn" id="editMatch">${g.streamOnly||g.manualRecord?'Add / Correct Stats (Classic)':'Edit Match / Stats (Classic)'}</button><button type="button" class="btn primary" id="openMatchSheets">Interactive Stat Sheets</button></div>`;
   if(g.manualRecord){
     $('#modalBody .stat-strip .metric:nth-child(2) b').textContent=`${Number(g.manualSetsWon)||0}-${Number(g.manualSetsLost)||0} (match result)`;
     $('#modalBody').insertAdjacentHTML('afterbegin','<div class="notice"><strong>Manually entered match</strong><div class="muted">Add or correct player and team stats for each set. The saved match result will not change.</div></div>');
@@ -871,7 +948,7 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
   const correctionCount=type=>statTypeCount(ev.filter(e=>e.playerId===selectedCorrectionPlayer&&Number(e.set)===selectedCorrectionSet),type);
 
   $('#modalTitle').textContent='Edit Match & Classic Stat Corrections';
-  $('#modalBody').innerHTML=`<div class="form-grid"><div class="field"><label>Opponent</label><input id="editOpponent" value="${esc(g.opponent||'')}"></div><div class="field"><label>Date</label><input id="editGameDate" type="date" value="${esc(g.date||today())}"></div><div class="field"><label>Match Type</label><select id="editConferenceType"><option value="" ${!g.conferenceType?'selected':''}>Unclassified</option><option value="conference" ${g.conferenceType==='conference'?'selected':''}>Conference</option><option value="nonconference" ${g.conferenceType==='nonconference'?'selected':''}>Non-Conference</option><option value="postseason" ${g.conferenceType==='postseason'?'selected':''}>Post Season</option></select></div></div>
+  $('#modalBody').innerHTML=`<div class="form-grid"><div class="field"><label>Opponent</label><input id="editOpponent" value="${esc(g.opponent||'')}"></div><div class="field"><label>Date</label><input id="editGameDate" type="date" value="${esc(g.date||today())}"></div>${isClubTeam(teamForGame(g))?`<div class="field"><label>Tournament / Event</label><input id="editEventName" value="${esc(g.eventName||'')}"></div>`:'' }<div class="field"><label>Match Type</label><select id="editConferenceType"><option value="" ${!g.conferenceType?'selected':''}>Unclassified</option><option value="conference" ${g.conferenceType==='conference'?'selected':''}>Conference</option><option value="nonconference" ${g.conferenceType==='nonconference'?'selected':''}>Non-Conference</option><option value="postseason" ${g.conferenceType==='postseason'?'selected':''}>Post Season</option></select></div></div>
   <div class="field"><label>Completed set scores</label><div class="list">${g.sets.map((set,i)=>`<div class="list-item"><strong>Set ${i+1}</strong><div class="set-score-edit"><input inputmode="numeric" data-set-home="${i}" value="${set.home}"><span>–</span><input inputmode="numeric" data-set-away="${i}" value="${set.away}"></div></div>`).join('')||'<div class="muted">No completed sets yet.</div>'}</div></div>
   <hr>
   <div class="button-row"><button type="button" class="btn primary" id="useSheetCorrections">Use Interactive Stat Sheets</button><span class="muted helper">Use the original player-by-player +/− stat editor below, or switch to the interactive sheets.</span></div><div class="field"><label>Player Stat Corrections</label><div class="form-grid"><div class="field"><label>Player</label><select id="correctionPlayer">${players.map(p=>`<option value="${p.id}" ${p.id===selectedCorrectionPlayer?'selected':''}>${playerLabel(p)}</option>`).join('')}</select></div><div class="field"><label>Set</label><select id="correctionSet">${sets.map(n=>`<option value="${n}" ${n===selectedCorrectionSet?'selected':''}>Set ${n}</option>`).join('')}</select></div></div><div class="stat-correction-grid">${correctionStatTypes.map(([type,label])=>`<div class="stat-correction-item"><span>${esc(label)}</span><div class="stat-correction-stepper"><button type="button" class="btn compact" data-correct-stat="${type}" data-delta="${type==='block_error'?-0.5:-1}">${type==='block_error'?'−0.5':'−'}</button><strong>${correctionCount(type)}</strong><button type="button" class="btn compact primary" data-correct-stat="${type}" data-delta="${type==='block_error'?0.5:1}">${type==='block_error'?'+0.5':'+'}</button></div></div>`).join('')}</div><div class="muted helper">Block Error corrections use 0.5 increments. Corrections change the player's stats only. Saved set scores are not changed. “Attempts” excludes kills and errors. Total Attacks = Kills + Errors + Attempts.</div></div>
@@ -943,7 +1020,12 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
     if(deleted?.source==='stat_sheet')await window.CoachHubStatSheets?.deleteEvent(deleted);
     openGameEditor(g,selectedCorrectionPlayer,selectedCorrectionSet);
   });
-  $('#saveGameCorrections').onclick=async()=>{g.opponent=$('#editOpponent').value.trim()||'Opponent';g.date=$('#editGameDate').value||today();g.conferenceType=$('#editConferenceType')?.value||'';$$('[data-set-home]').forEach(input=>{const i=+input.dataset.setHome;g.sets[i].home=Math.max(0,+input.value||0);});$$('[data-set-away]').forEach(input=>{const i=+input.dataset.setAway;g.sets[i].away=Math.max(0,+input.value||0);});await persist();$('#modal').close();showGameSummary(g.id);render();};
+  $('#saveGameCorrections').onclick=async()=>{
+    if(isClubTeam(teamForGame(g))&&!g.manualRecord){
+      const preview=g.sets.map((s,i)=>({...s,home:Math.max(0,Number($('[data-set-home="'+i+'"]')?.value)||0),away:Math.max(0,Number($('[data-set-away="'+i+'"]')?.value)||0)}));
+      if(preview.length>3||!clubMatchResult(preview).done)return alert('A completed club match must have two winning sets (2–0 or 2–1). Correct the set scores before saving.');
+    }
+    g.opponent=$('#editOpponent').value.trim()||'Opponent';g.date=$('#editGameDate').value||today();g.conferenceType=$('#editConferenceType')?.value||'';if(isClubTeam(teamForGame(g)))g.eventName=$('#editEventName')?.value.trim()||'';$('[data-set-home]').forEach(input=>{const i=+input.dataset.setHome;g.sets[i].home=Math.max(0,+input.value||0);});$$('[data-set-away]').forEach(input=>{const i=+input.dataset.setAway;g.sets[i].away=Math.max(0,+input.value||0);});await persist();$('#modal').close();showGameSummary(g.id);render();};
   $('#deleteMatch').onclick=async()=>{if(!confirm(`Permanently delete the match vs ${g.opponent} and all of its stats?`))return;state.events=state.events.filter(e=>e.gameId!==g.id);state.games=state.games.filter(x=>x.id!==g.id);if(state.activeGameId===g.id)state.activeGameId=null;await persist();$('#modal').close();setView('games');};
   if(!$('#modal').open)$('#modal').showModal();
 }

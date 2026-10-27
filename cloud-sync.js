@@ -2,6 +2,7 @@ import { loadState, saveState, mutateState } from './db.js';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './supabase-config.js';
 import { applySheetOps, fetchSheetOps } from './sheet-ops.mjs';
 import { mergeTeamCloudSnapshot } from './team-refresh.mjs';
+import {teamType} from './team-modes.mjs';
 
 const MEDIA_BUCKET='team-media';
 let clientPromise=null;
@@ -34,7 +35,7 @@ function describeSyncError(error){
 function localTeamToCloud(t,userId,logoPath=null){
   return {
     id:t.id,owner_id:userId,name:t.name||'Team',school:t.school||null,level:t.level||null,
-    season:t.season||null,logo_path:logoPath,deleted_at:null
+    season:t.season||null,team_type:teamType(t),logo_path:logoPath,deleted_at:null
   };
 }
 
@@ -50,7 +51,7 @@ function localPlayerToCloud(p,photoPath=null){
 function localMatchToCloud(g,userId){
   return {
     id:g.id,team_id:g.teamId,opponent:g.opponent||'Opponent',match_date:g.date||null,location:g.location||null,
-    site_type:g.siteType||null,conference_type:g.conferenceType||null,complete:!!g.complete,manual_record:!!g.manualRecord,
+    site_type:g.siteType||null,conference_type:g.conferenceType||null,event_name:g.eventName||null,complete:!!g.complete,manual_record:!!g.manualRecord,
     manual_sets_won:g.manualRecord?Number(g.manualSetsWon??g.sets?.[0]?.home??0):null,
     manual_sets_lost:g.manualRecord?Number(g.manualSetsLost??g.sets?.[0]?.away??0):null,
     current_set:Number(g.currentSet)||1,home_score:Number(g.homeScore)||0,away_score:Number(g.awayScore)||0,
@@ -311,7 +312,7 @@ function normalizedGameFromCloud(m,sets,lineups,subs){
   }
   const won=Number(m.manual_sets_won??gameSets?.[0]?.home??0),lost=Number(m.manual_sets_lost??gameSets?.[0]?.away??0);
   return {
-    id:m.id,teamId:m.team_id,opponent:m.opponent,date:m.match_date||'',location:m.location||'',siteType:m.site_type||'',conferenceType:m.conference_type||'',
+    id:m.id,teamId:m.team_id,opponent:m.opponent,date:m.match_date||'',location:m.location||'',siteType:m.site_type||'',conferenceType:m.conference_type||'',eventName:m.event_name||'',
     complete:!!m.complete,manualRecord:!!m.manual_record,manualSetsWon:m.manual_record?won:undefined,manualSetsLost:m.manual_record?lost:undefined,
     manualMatchResult:m.manual_record?(won>lost?'W':lost>won?'L':''):undefined,currentSet:Number(m.current_set)||1,homeScore:Number(m.home_score)||0,
     awayScore:Number(m.away_score)||0,rosterSnapshot:m.roster_snapshot||[],sets:gameSets,setLineups,createdAt:m.created_at,completedAt:m.completed_at||null
@@ -355,7 +356,7 @@ async function normalizedRestoreData(supabase,teamId){
   const games=(matchesR.data||[]).map(m=>normalizedGameFromCloud(m,setsR.data||[],lineupsR.data||[],subs));
   const events=[...(statsR.data||[]).map(cloudStatToLocal),...subs.map(cloudSubToLocal)].sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)));
   return {
-    team:{id:team.id,name:team.name,school:team.school||'',level:team.level||'',season:team.season||'',createdAt:team.created_at,logo:''},
+    team:{id:team.id,name:team.name,school:team.school||'',level:team.level||'',season:team.season||'',teamType:team.team_type==='club'?'club':'school',createdAt:team.created_at,logo:''},
     players,games,events,teamRow:team,playerRows:playersR.data||[]
   };
 }
@@ -378,7 +379,7 @@ export async function restoreCloudTeam(teamId){
       restored={team:snap.team,players:snap.players,games:snap.games,events:snap.events};
     }
 
-    Object.assign(restored.team,{id:normalized.team.id,name:normalized.team.name,school:normalized.team.school,level:normalized.team.level,season:normalized.team.season});
+    Object.assign(restored.team,{id:normalized.team.id,name:normalized.team.name,school:normalized.team.school,level:normalized.team.level,season:normalized.team.season,teamType:normalized.team.teamType});
 
     if(normalized.teamRow.logo_path){
       try{restored.team.logo=await downloadImage(supabase,normalized.teamRow.logo_path);}catch(e){console.warn('Team logo restore failed',e);}
