@@ -789,7 +789,7 @@ async function undoEvent(){
 }
 
 async function endSet(){
-  const g=activeGame();if(!g)return;if(g.homeScore===g.awayScore&&!confirm('The set is tied. End it anyway?'))return;
+  const g=activeGame();if(!g)return;if(g.homeScore===g.awayScore&&(isClubTeam(teamForGame(g))||!confirm('The set is tied. End it anyway?'))){if(isClubTeam(teamForGame(g)))alert('A club set must have a winner before it can end.');return;}
   if(isClubTeam(teamForGame(g))&&g.currentSet>3)return alert('Club matches cannot exceed three sets.');
   g.sets.push({set:g.currentSet,home:g.homeScore,away:g.awayScore});
   if(isClubTeam(teamForGame(g))&&clubMatchResult(g.sets).done){
@@ -875,7 +875,7 @@ async function undoStreamScore(){
 
 async function endSetForStream(){
   const g=activeGame();if(!g)return false;
-  if(g.homeScore===g.awayScore&&!confirm('The set is tied. End it anyway?'))return false;
+  if(g.homeScore===g.awayScore&&(isClubTeam(teamForGame(g))||!confirm('The set is tied. End it anyway?'))){if(isClubTeam(teamForGame(g)))alert('A club set must have a winner before it can end.');return false;}
   const finishedSet=Number(g.currentSet)||1;
   if(isClubTeam(teamForGame(g))&&finishedSet>3){alert('Club matches cannot exceed three sets.');return false;}
   g.sets.push({set:finishedSet,home:g.homeScore,away:g.awayScore});
