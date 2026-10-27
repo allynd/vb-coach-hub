@@ -51,7 +51,7 @@ function localPlayerToCloud(p,photoPath=null){
 function localMatchToCloud(g,userId){
   return {
     id:g.id,team_id:g.teamId,opponent:g.opponent||'Opponent',match_date:g.date||null,location:g.location||null,
-    site_type:g.siteType||null,conference_type:g.conferenceType||null,event_name:g.eventName||null,complete:!!g.complete,manual_record:!!g.manualRecord,
+    site_type:g.siteType||null,conference_type:g.conferenceType||null,event_name:g.eventName||null,event_round:g.eventRound||null,complete:!!g.complete,manual_record:!!g.manualRecord,
     manual_sets_won:g.manualRecord?Number(g.manualSetsWon??g.sets?.[0]?.home??0):null,
     manual_sets_lost:g.manualRecord?Number(g.manualSetsLost??g.sets?.[0]?.away??0):null,
     current_set:Number(g.currentSet)||1,home_score:Number(g.homeScore)||0,away_score:Number(g.awayScore)||0,
@@ -312,7 +312,7 @@ function normalizedGameFromCloud(m,sets,lineups,subs){
   }
   const won=Number(m.manual_sets_won??gameSets?.[0]?.home??0),lost=Number(m.manual_sets_lost??gameSets?.[0]?.away??0);
   return {
-    id:m.id,teamId:m.team_id,opponent:m.opponent,date:m.match_date||'',location:m.location||'',siteType:m.site_type||'',conferenceType:m.conference_type||'',eventName:m.event_name||'',
+    id:m.id,teamId:m.team_id,opponent:m.opponent,date:m.match_date||'',location:m.location||'',siteType:m.site_type||'',conferenceType:m.conference_type||'',eventName:m.event_name||'',eventRound:m.event_round||'',
     complete:!!m.complete,manualRecord:!!m.manual_record,manualSetsWon:m.manual_record?won:undefined,manualSetsLost:m.manual_record?lost:undefined,
     manualMatchResult:m.manual_record?(won>lost?'W':lost>won?'L':''):undefined,currentSet:Number(m.current_set)||1,homeScore:Number(m.home_score)||0,
     awayScore:Number(m.away_score)||0,rosterSnapshot:m.roster_snapshot||[],sets:gameSets,setLineups,createdAt:m.created_at,completedAt:m.completed_at||null

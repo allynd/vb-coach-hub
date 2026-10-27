@@ -1,4 +1,5 @@
 import { loadState, saveState } from './db.js';
+import {isClubTeam} from './team-modes.mjs';
 
 const $ = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => [...root.querySelectorAll(s)];
@@ -36,7 +37,7 @@ async function setGameConference(gameId,type){
   if(!gameId) return;
   const state=await loadState();
   const game=(state?.games||[]).find(g=>g.id===gameId);
-  if(!game) return;
+  if(!game||isClubTeam((state.teams||[]).find(t=>t.id===game.teamId))) return;
   game.conferenceType=type||'';
   await saveState(state);
 }
@@ -59,6 +60,7 @@ async function applyPending(){
     game=(state.games||[]).find(g=>g.id===state.activeGameId);
   }
   if(game){
+    if(isClubTeam((state.teams||[]).find(t=>t.id===game.teamId))){sessionStorage.removeItem('coachHubPendingConference');return;}
     game.conferenceType=pending.type;
     await saveState(state);
     sessionStorage.removeItem('coachHubPendingConference');
@@ -86,6 +88,8 @@ async function enhanceTrackedNewMatch(){
   const body=$('#modalBody');
   const grid=$('.form-grid',body);
   if(!grid || $('#gConferenceType',body)) return;
+  const state=await loadState();
+  if(isClubTeam((state?.teams||[]).find(t=>t.id===state.activeTeamId)))return;
   grid.insertAdjacentHTML('beforeend',conferenceField('gConferenceType','conference',false));
   const start=$('#startMatch',body);
   if(start && !start.dataset.conferenceEnhanced){
@@ -114,6 +118,7 @@ async function enhanceManualDialog(){
   const state=await loadState();
   const game=isEdit && lastOpenedGameId ? (state?.games||[]).find(g=>g.id===lastOpenedGameId) : null;
   const grid=$('.form-grid',body);
+  if(isClubTeam((state?.teams||[]).find(t=>t.id===state.activeTeamId)) || (game&&isClubTeam((state?.teams||[]).find(t=>t.id===game.teamId))))return;
 
   if(grid && !$('#manualConferenceType',body)){
     grid.insertAdjacentHTML('beforeend',conferenceField('manualConferenceType',game?.conferenceType||'conference',false));
@@ -151,7 +156,7 @@ async function enhanceMatchModal(){
   if(!modal?.open || !lastOpenedGameId) return;
   const state=await loadState();
   const game=(state?.games||[]).find(g=>g.id===lastOpenedGameId);
-  if(!game || game.manualRecord) return;
+  if(!game || game.manualRecord || isClubTeam((state?.teams||[]).find(t=>t.id===game.teamId))) return;
   const body=$('#modalBody',modal);
   if(!body) return;
   const title=$('#modalTitle')?.textContent.trim()||'';
@@ -170,6 +175,7 @@ async function enhanceRecords(){
   if(!main) return;
   const state=await loadState();
   if(!state?.activeTeamId) return;
+  if(isClubTeam((state.teams||[]).find(t=>t.id===state.activeTeamId)))return;
   const games=(state.games||[]).filter(g=>g.teamId===state.activeTeamId && g.complete);
   const overall=record(games);
   // Playoff results are excluded from the regular-season record, but included in Overall.

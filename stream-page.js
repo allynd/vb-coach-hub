@@ -1,5 +1,6 @@
 import { loadState, saveState } from './db.js';
 import {isClubTeam} from './team-modes.mjs';
+import {CLUB_ROUNDS} from './club-tournaments.mjs';
 
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>[...r.querySelectorAll(s)];
@@ -72,14 +73,15 @@ async function openStreamMatchSetup(){
   const modal=$('#modal'),title=$('#modalTitle'),body=$('#modalBody');
   if(!modal||!title||!body)return;
   const club=isClubTeam(team);
+  const roundOptions='<option value="">Unassigned / TBD</option>'+CLUB_ROUNDS.map(label=>`<option value="${esc(label)}" ${label==='Pool Play'?'selected':''}>${esc(label)}</option>`).join('');
   title.textContent='New Stream Match';
   body.innerHTML=`
     <div class="notice"><strong>Quick broadcast setup</strong><div class="muted">No roster, lineup, rotation, or player stats are required. You can attach player stats later.</div></div>
     <div class="form-grid" style="margin-top:12px">
       <div class="field"><label>Opponent</label><input id="streamNewOpponent" placeholder="Opponent name"></div>
-      ${club?`<div class="field"><label>Tournament / Event</label><input id="streamNewEvent" placeholder="Weekend tournament name"></div>`:''}
+      ${club?`<div class="field"><label>Tournament / Event</label><input id="streamNewEvent" placeholder="Weekend tournament name"></div><div class="field"><label>Tournament Round</label><select id="streamNewRound">${roundOptions}</select></div>`:''}
       <div class="field"><label>Date</label><input id="streamNewDate" type="date" value="${today()}"></div>
-      <div class="field"><label>Match Type</label><select id="streamNewConference"><option value="conference">Conference</option><option value="nonconference">Non-Conference</option><option value="postseason">Post Season</option><option value="">Unclassified</option></select></div>
+      ${!club?`<div class="field"><label>Match Type</label><select id="streamNewConference"><option value="conference">Conference</option><option value="nonconference">Non-Conference</option><option value="postseason">Post Season</option><option value="">Unclassified</option></select></div>`:''}
       <div class="field"><label>Site</label><select id="streamNewSite"><option value="home">Home</option><option value="away">Away</option><option value="neutral">Neutral</option></select></div>
       <div class="field"><label>Where / Venue</label><input id="streamNewLocation" placeholder="School, gym, tournament, city…"></div>
       <div class="field"><label>First Serve</label><select id="streamNewServe"><option value="home">${esc(team.name||'Team')}</option><option value="away">Opponent</option></select></div>
@@ -94,7 +96,8 @@ async function openStreamMatchSetup(){
       opponent,
       date:$('#streamNewDate',body).value||today(),
       eventName:club?$('#streamNewEvent',body).value.trim():'',
-      conferenceType:$('#streamNewConference',body).value||'',
+      conferenceType:club?'':$('#streamNewConference',body).value||'',
+      eventRound:club?$('#streamNewRound',body).value||'':'',
       siteType:$('#streamNewSite',body).value||'home',
       location:$('#streamNewLocation',body).value.trim(),
       startingServe:$('#streamNewServe',body).value==='away'?'away':'home'
