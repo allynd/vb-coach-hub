@@ -1020,7 +1020,12 @@ function openGameEditor(g,correctionPlayerId=null,correctionSetNo=null){
     if(deleted?.source==='stat_sheet')await window.CoachHubStatSheets?.deleteEvent(deleted);
     openGameEditor(g,selectedCorrectionPlayer,selectedCorrectionSet);
   });
-  $('#saveGameCorrections').onclick=async()=>{g.opponent=$('#editOpponent').value.trim()||'Opponent';g.date=$('#editGameDate').value||today();g.conferenceType=$('#editConferenceType')?.value||'';if(isClubTeam(teamForGame(g)))g.eventName=$('#editEventName')?.value.trim()||'';$('[data-set-home]').forEach(input=>{const i=+input.dataset.setHome;g.sets[i].home=Math.max(0,+input.value||0);});$$('[data-set-away]').forEach(input=>{const i=+input.dataset.setAway;g.sets[i].away=Math.max(0,+input.value||0);});await persist();$('#modal').close();showGameSummary(g.id);render();};
+  $('#saveGameCorrections').onclick=async()=>{
+    if(isClubTeam(teamForGame(g))&&!g.manualRecord){
+      const preview=g.sets.map((s,i)=>({...s,home:Math.max(0,Number($('[data-set-home="'+i+'"]')?.value)||0),away:Math.max(0,Number($('[data-set-away="'+i+'"]')?.value)||0)}));
+      if(preview.length>3||!clubMatchResult(preview).done)return alert('A completed club match must have two winning sets (2–0 or 2–1). Correct the set scores before saving.');
+    }
+    g.opponent=$('#editOpponent').value.trim()||'Opponent';g.date=$('#editGameDate').value||today();g.conferenceType=$('#editConferenceType')?.value||'';if(isClubTeam(teamForGame(g)))g.eventName=$('#editEventName')?.value.trim()||'';$('[data-set-home]').forEach(input=>{const i=+input.dataset.setHome;g.sets[i].home=Math.max(0,+input.value||0);});$$('[data-set-away]').forEach(input=>{const i=+input.dataset.setAway;g.sets[i].away=Math.max(0,+input.value||0);});await persist();$('#modal').close();showGameSummary(g.id);render();};
   $('#deleteMatch').onclick=async()=>{if(!confirm(`Permanently delete the match vs ${g.opponent} and all of its stats?`))return;state.events=state.events.filter(e=>e.gameId!==g.id);state.games=state.games.filter(x=>x.id!==g.id);if(state.activeGameId===g.id)state.activeGameId=null;await persist();$('#modal').close();setView('games');};
   if(!$('#modal').open)$('#modal').showModal();
 }
