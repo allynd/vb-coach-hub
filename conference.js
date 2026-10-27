@@ -118,7 +118,7 @@ async function enhanceManualDialog(){
   const state=await loadState();
   const game=isEdit && lastOpenedGameId ? (state?.games||[]).find(g=>g.id===lastOpenedGameId) : null;
   const grid=$('.form-grid',body);
-  if(isClubTeam((state?.teams||[]).find(t=>t.id===(game?.teamId||state.activeTeamId))))return;
+  if(isClubTeam((state?.teams||[]).find(t=>t.id===state.activeTeamId)) || (game&&isClubTeam((state?.teams||[]).find(t=>t.id===game.teamId))))return;
 
   if(grid && !$('#manualConferenceType',body)){
     grid.insertAdjacentHTML('beforeend',conferenceField('manualConferenceType',game?.conferenceType||'conference',false));
