@@ -14,3 +14,14 @@ export function embedUrl(videoId, start, end) {
   const range=playbackWindow(start,end);
   return `https://www.youtube-nocookie.com/embed/${videoId}?start=${Math.floor(range.start)}&end=${Math.max(Math.floor(range.start)+1,Math.ceil(range.end))}&autoplay=1&playsinline=1`;
 }
+
+export function youtubeId(value) {
+  const raw=String(value||'').trim();
+  if(/^[\w-]{11}$/.test(raw))return raw;
+  let url;try{url=new URL(raw);}catch{throw Error('Paste a valid YouTube video URL.');}
+  if(!['https:','http:'].includes(url.protocol))throw Error('Paste a valid YouTube video URL.');
+  const host=url.hostname.toLowerCase(),parts=url.pathname.split('/').filter(Boolean);
+  const id=host==='youtu.be'?parts[0]:['youtube.com','www.youtube.com','m.youtube.com'].includes(host)?(url.pathname==='/watch'?url.searchParams.get('v'):['live','shorts','embed'].includes(parts[0])?parts[1]:null):null;
+  if(!/^[\w-]{11}$/.test(id||''))throw Error('Paste a valid YouTube video URL.');
+  return id;
+}
