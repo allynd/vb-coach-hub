@@ -68,3 +68,11 @@ python film-worker/analyze.py "Hastings vs Eagan - AI analysis sample - 04m37s t
 ```
 
 For local inference append `--weights "C:\Models\detector.pt" --device 0`, using a new output directory. Extraction defaults now start at zero; full-recording commands above explicitly retain `--start 277`. `sampleOffset` is the original-video offset (source offset + extraction start). Both track timestamps and candidate windows use that same mapping. Five Python tests pass, including equivalent mapping for a full recording and pre-trimmed clip and rejection of negative/non-finite offsets.
+
+## Timestamp-driven manual verification
+
+Each Film Analysis row now has a formatted timestamp button, e.g. **4:37–4:47**. Clicking it loads an embedded YouTube player with three seconds of lead-in and two seconds after the marked interval. The reviewer can pause or change playback speed using native player controls, correct the row's player/action/set/timestamps, then choose **Verify & add stat** or **Reject**. Playback itself never approves a stat. An external YouTube link remains available if embedding or autoplay is blocked.
+
+The review player also accepts a local video via a browser file picker; bytes are not uploaded. For the supplied 4:37–5:37 sample, set **Original-video start of local file** to **277** seconds. Clicking original timestamp 4:37 seeks local time 0:00. Out-of-range moments are rejected rather than silently clamped to an unrelated play. Closing the review pauses local video and removes embedded playback. The local-file selection is temporary and must be repeated after reloading the app.
+
+Five new playback tests cover formatting, lead-in, local-offset conversion, duration bounds, and validated embed URLs. Combined film/playback tests: 11 passing. Embedded YouTube and local playback still require browser acceptance testing before release; this remains on draft PR #8, not the live app.
