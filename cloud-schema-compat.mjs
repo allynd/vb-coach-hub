@@ -29,6 +29,19 @@ export function missingOptionalColumn(error, table, payload) {
 }
 
 /**
+ * Older school schemas reject the newly supported Post Season classification.
+ * Keep all school game records in the full team snapshot, while using null for
+ * the unsupported normalized field until the matching migration is applied.
+ * Never bypass check constraints on unrelated fields or unexpected values.
+ */
+export function legacyPostseasonConstraint(error, table, payload) {
+  if (table !== 'matches' || String(error?.code || '') !== '23514' ||
+      !/matches_conference_type_check/i.test(String(error?.message || '')+' '+String(error?.details || '')+' '+String(error?.constraint || ''))) return false;
+  const rows = Array.isArray(payload) ? payload : [payload];
+  return rows.some(row => row && row.conference_type === 'postseason');
+}
+
+/**
  * Retry a write only if PostgREST rejects a known, nonessential new column.
  * Never mutate the original objects. All other errors, including RLS, propagate.
  */
@@ -42,17 +55,18 @@ export async function writeWithSchemaFallback(table, payload, write, onSkipped =
       return result;
     }
     const missing = missingOptionalColumn(result.error, table, current);
-    if (!missing || skipped.includes(missing)) throw result.error;
-    skipped.push(missing);
-    if (Array.isArray(current)) current = current.map(row => {
+    const legacyPostseason = !missing && legacyPostseasonConstraint(result.error,table,current);
+    if (!missing && !legacyPostseason) throw result.error;
+    const field = legacyPostseason ? 'conference_type (postseason)' : missing;
+    if (skipped.includes(field)) throw result.error;
+    skipped.push(field);
+    const adjust = row => {
       const next = {...row};
-      delete next[missing];
+      if (legacyPostseason) {
+        if (next.conference_type === 'postseason') next.conference_type = null;
+      } else delete next[missing];
       return next;
-    });
-    else {
-      const next = {...current};
-      delete next[missing];
-      current = next;
-    }
+    };
+    current = Array.isArray(current) ? current.map(adjust) : adjust(current);
   }
 }
