@@ -43,10 +43,10 @@ test('team updates work on old schema without lying about optional metadata', as
 test('permissions failures and missing required columns still stop sync', async () => {
   await assert.rejects(writeWithSchemaFallback('matches',{id:'m1'},async()=>({
     error:{code:'42501',message:'permission denied for table matches'}
-  })),/permission denied/);
+  })),error=>error.code==='42501' && /permission denied/.test(error.message));
   await assert.rejects(writeWithSchemaFallback('matches',{id:'m1'},async()=>({
     error:cacheError('id','matches')
-  })),/Could not find/);
+  })),error=>error.code==='PGRST204' && /Could not find/.test(error.message));
 });
 
 test('school post-season match sync survives old SQL constraint without losing original classifications', async () => {
@@ -73,7 +73,7 @@ test('school post-season match sync survives old SQL constraint without losing o
 test('unexpected school match constraint violations still fail',async () => {
   await assert.rejects(writeWithSchemaFallback('matches',[{id:'g1',conference_type:'postseason'}],async()=>({
     error:{code:'23514',message:'violates check constraint "matches_site_type_check"'}
-  })),/matches_site_type_check/);
+  })),error=>error.code==='23514' && /matches_site_type_check/.test(error.message));
 });
 
 test('postseason and optional column fallbacks compose safely',async () => {
