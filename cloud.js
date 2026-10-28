@@ -1,5 +1,6 @@
 import { loadState, saveState } from './db.js';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './supabase-config.js';
+import {writeWithSchemaFallback} from './cloud-schema-compat.mjs';
 
 const $ = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => [...root.querySelectorAll(s)];
@@ -196,9 +197,11 @@ async function uploadActiveTeam(){
     const {data:existing,error:existingError}=await supabase.from('teams').select('id,owner_id').eq('id',team.id).maybeSingle();
     if(existingError) throw existingError;
 
+    const omitted=new Set();
     if(!existing){
-      const {error}=await supabase.from('teams').insert(localTeamToCloud(team,user.id));
-      if(error) throw error;
+      await writeWithSchemaFallback('teams',localTeamToCloud(team,user.id),
+        payload=>supabase.from('teams').insert(payload),
+        fields=>fields.forEach(field=>omitted.add('teams.'+field)));
       const {error:memberError}=await supabase.from('team_members').insert({team_id:team.id,user_id:user.id,role:'owner'});
       if(memberError) throw memberError;
     }else{
@@ -209,8 +212,9 @@ async function uploadActiveTeam(){
       }
       if(existing.owner_id===user.id){
         const {owner_id,...teamUpdate}=localTeamToCloud(team,user.id);
-        const {error}=await supabase.from('teams').update(teamUpdate).eq('id',team.id);
-        if(error) throw error;
+        await writeWithSchemaFallback('teams',teamUpdate,
+          payload=>supabase.from('teams').update(payload).eq('id',team.id),
+          fields=>fields.forEach(field=>omitted.add('teams.'+field)));
       }
     }
 
@@ -222,7 +226,8 @@ async function uploadActiveTeam(){
       const {error}=await supabase.from('players').upsert(players,{onConflict:'id'});
       if(error) throw error;
     }
-    lastMessage=`Uploaded ${team.name} and ${players.length} player${players.length===1?'':'s'} to the cloud. Match/stat sync comes in the next phase.`;
+    lastMessage=`Uploaded ${team.name} and ${players.length} player${players.length===1?'':'s'} to the cloud. Use Full Sync for all match/stat data.`
+      +(omitted.size?' Optional metadata not stored as columns: '+[...omitted].join(', ')+'. Apply the Club migration.':'');
   }catch(e){lastMessage=describeError(e);}
   finally{busy=false;renderCloudCard();}
 }
@@ -231,7 +236,7 @@ async function listCloudTeams(userId){
   const supabase=await getClient();
   const {data,error}=await supabase
     .from('team_members')
-    .select('role, team:teams(id,name,school,level,season,team_type,owner_id,updated_at)')
+    .select('role, team:teams(id,name,school,level,season,owner_id,updated_at)')
     .eq('user_id',userId)
     .order('created_at',{ascending:true});
   if(error) throw error;
@@ -257,7 +262,8 @@ async function downloadCloudTeam(teamId){
     const state=await loadState()||{teams:[],players:[],games:[],events:[],settings:{statMode:'advanced'}};
     state.teams=state.teams||[];
     state.players=state.players||[];
-    const localTeam={id:team.id,name:team.name,school:team.school||'',level:team.level||'',season:team.season||'',teamType:team.team_type==='club'?'club':'school',createdAt:team.created_at};
+    const localTeam={id:team.id,name:team.name,school:team.school||'',level:team.level||'',season:team.season||'',
+      teamType:team.team_type==='club'?'club':'school',createdAt:team.created_at};
     const existingTeam=state.teams.find(t=>t.id===team.id);
     if(existingTeam) Object.assign(existingTeam,{...localTeam,logo:existingTeam.logo||''});
     else state.teams.push(localTeam);
