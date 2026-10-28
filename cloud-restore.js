@@ -68,7 +68,7 @@ function normalizedGameFromCloud(m,sets,lineups,subs){
   const won=Number(m.manual_sets_won??gameSets?.[0]?.home??0);
   const lost=Number(m.manual_sets_lost??gameSets?.[0]?.away??0);
   return {
-    id:m.id,teamId:m.team_id,opponent:m.opponent,date:m.match_date||'',location:m.location||'',siteType:m.site_type||'',conferenceType:m.conference_type||'',
+    id:m.id,teamId:m.team_id,opponent:m.opponent,date:m.match_date||'',location:m.location||'',siteType:m.site_type||'',conferenceType:m.conference_type||'',eventName:m.event_name||'',eventRound:m.event_round||'',
     complete:!!m.complete,manualRecord:!!m.manual_record,
     manualSetsWon:m.manual_record?won:undefined,manualSetsLost:m.manual_record?lost:undefined,
     manualMatchResult:m.manual_record?(won>lost?'W':lost>won?'L':''):undefined,
@@ -97,7 +97,7 @@ function normalizeBundle(bundle){
     .sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)));
 
   return {
-    team:{id:team.id,name:team.name,school:team.school||'',level:team.level||'',season:team.season||'',createdAt:team.created_at,logo:''},
+    team:{id:team.id,name:team.name,school:team.school||'',level:team.level||'',season:team.season||'',teamType:team.team_type==='club'?'club':'school',createdAt:team.created_at,logo:''},
     players,games,events,teamRow:team,playerRows,snapshot:bundle.snapshot||null
   };
 }
@@ -132,7 +132,9 @@ export async function restoreCloudTeam(teamId){
     name:normalized.team.name,
     school:normalized.team.school,
     level:normalized.team.level,
-    season:normalized.team.season
+    season:normalized.team.season,
+    // Preserve the snapshot's club format when an older database lacks team_type.
+    teamType:Object.hasOwn(normalized.teamRow,'team_type')?normalized.team.teamType:(restored.team.teamType||'school')
   });
 
   // Media failures should never prevent the actual team data from downloading.
