@@ -48,3 +48,44 @@ test('permissions failures and missing required columns still stop sync', async 
     error:cacheError('id','matches')
   })),/Could not find/);
 });
+
+test('school post-season match sync survives old SQL constraint without losing original classifications', async () => {
+  const rows=[
+    {id:'g1',conference_type:'conference',home_score:25},
+    {id:'g2',conference_type:'postseason',home_score:25},
+    {id:'g3',conference_type:'nonconference',home_score:25}
+  ];
+  let sent=[];
+  let skipped=[];
+  await writeWithSchemaFallback('matches',rows,async payload=>{
+    sent.push(payload);
+    if (payload.some(p=>p.conference_type==='postseason')) return {error:{
+      code:'23514',message:'new row for relation "matches" violates check constraint "matches_conference_type_check"'
+    }};
+    return {data:[]};
+  },columns=>skipped=columns);
+  assert.equal(sent.length,2);
+  assert.deepEqual(sent[1].map(r=>r.conference_type),['conference',null,'nonconference']);
+  assert.equal(rows[1].conference_type,'postseason');
+  assert.deepEqual(skipped,['conference_type (postseason)']);
+});
+
+test('unexpected school match constraint violations still fail',async () => {
+  await assert.rejects(writeWithSchemaFallback('matches',[{id:'g1',conference_type:'postseason'}],async()=>({
+    error:{code:'23514',message:'violates check constraint "matches_site_type_check"'}
+  })),/matches_site_type_check/);
+});
+
+test('postseason and optional column fallbacks compose safely',async () => {
+  const row={id:'g1',conference_type:'postseason',event_round:null,home_score:25};
+  const attempts=[];
+  await writeWithSchemaFallback('matches',[row],async payload=>{
+    attempts.push(payload);
+    if (attempts.length===1) return {error:cacheError('event_round','matches')};
+    if (attempts.length===2) return {error:{code:'23514',message:'violates check constraint "matches_conference_type_check"'}};
+    return {data:[]};
+  });
+  assert.equal(attempts.length,3);
+  assert.deepEqual(attempts[2],[{id:'g1',conference_type:null,home_score:25}]);
+  assert.equal(row.conference_type,'postseason');
+});
