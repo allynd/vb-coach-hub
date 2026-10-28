@@ -27,8 +27,9 @@ async function currentUser(){
 
 function describeSyncError(error){
   const msg=error?.message||String(error||'Unknown error');
-  if(/team_snapshots|team-media|relation .* does not exist|Could not find the table/i.test(msg)) return 'The Coach Hub 14.00 Supabase migration has not been applied yet.';
-  if(/row-level security|403|not authorized/i.test(msg)) return `Supabase blocked this operation: ${msg}`;
+  if(/row-level security|permission denied|403|not authorized/i.test(msg)) return `Supabase blocked this operation: ${msg}`;
+  if(/team_snapshots|team-media|relation .* does not exist|Could not find the table/i.test(msg)) return 'The Coach Hub 14.00 Supabase migration has not been applied yet: '+msg;
+  if(/could not find .* column|column .* does not exist/i.test(msg)) return 'The database is missing a required column: '+msg;
   if(/Failed to fetch|network/i.test(msg)) return 'Could not reach Supabase. Check your internet connection and try again.';
   return msg;
 }
