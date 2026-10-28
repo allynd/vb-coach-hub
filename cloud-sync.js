@@ -3,6 +3,7 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './supabase-config.js';
 import { applySheetOps, fetchSheetOps } from './sheet-ops.mjs';
 import { mergeTeamCloudSnapshot } from './team-refresh.mjs';
 import {teamType} from './team-modes.mjs';
+import {writeWithSchemaFallback} from './cloud-schema-compat.mjs';
 
 const MEDIA_BUCKET='team-media';
 let clientPromise=null;
@@ -30,6 +31,18 @@ function describeSyncError(error){
   if(/row-level security|403|not authorized/i.test(msg)) return `Supabase blocked this operation: ${msg}`;
   if(/Failed to fetch|network/i.test(msg)) return 'Could not reach Supabase. Check your internet connection and try again.';
   return msg;
+}
+
+function isMissingOptionalCloudRead(error,table){
+  const code=String(error?.code||'');
+  const message=String(error?.message||'');
+  // Only genuinely absent optional schema may fall back; do not mask RLS errors.
+  return ['42P01','PGRST205','42703','PGRST204'].includes(code) &&
+    (/does not exist|schema cache|could not find the table/i.test(message)) &&
+    (message.includes(table) || (table==='sheet_stat_ops' && /column .*does not exist/i.test(message)));
+}
+function recordSkipped(omitted,table,fields){
+  for(const field of fields) omitted.add(table+'.'+field);
 }
 
 function localTeamToCloud(t,userId,logoPath=null){
@@ -147,13 +160,14 @@ async function membershipFor(teamId,userId){
   return data?.role||null;
 }
 
-async function ensureCloudTeam(supabase,team,userId){
+async function ensureCloudTeam(supabase,team,userId,omitted){
   const {data:existing,error:existingError}=await supabase.from('teams').select('id,owner_id,logo_path').eq('id',team.id).maybeSingle();
   if(existingError) throw existingError;
 
   if(!existing){
-    const {error}=await supabase.from('teams').insert(localTeamToCloud(team,userId,null));
-    if(error) throw error;
+    await writeWithSchemaFallback('teams',localTeamToCloud(team,userId,null),
+      payload=>supabase.from('teams').insert(payload),
+      fields=>recordSkipped(omitted,'teams',fields));
     const {error:memberError}=await supabase.from('team_members').insert({team_id:team.id,user_id:userId,role:'owner'});
     if(memberError) throw memberError;
     return {role:'owner',existing:null};
@@ -169,10 +183,11 @@ async function ensureCloudTeam(supabase,team,userId){
   return {role,existing};
 }
 
-async function reconcileIdTable(supabase,table,teamId,rows,idField='id'){
+async function reconcileIdTable(supabase,table,teamId,rows,idField='id',omitted=new Set()){
   if(rows.length){
-    const {error}=await supabase.from(table).upsert(rows,{onConflict:idField});
-    if(error) throw error;
+    await writeWithSchemaFallback(table,rows,
+      payload=>supabase.from(table).upsert(payload,{onConflict:idField}),
+      fields=>recordSkipped(omitted,table,fields));
   }
   const {data:existing,error}=await supabase.from(table).select(idField).eq('team_id',teamId);
   if(error) throw error;
@@ -208,14 +223,15 @@ export async function syncFullActiveTeam(){
     const user=await currentUser();
     if(!user) throw new Error('Sign in first.');
 
-    const {existing,role}=await ensureCloudTeam(supabase,team,user.id);
+    const omitted=new Set();
+    const {existing,role}=await ensureCloudTeam(supabase,team,user.id,omitted);
     // Merge the append-only collaboration log before any full-team snapshot upload.
     // Unlike a last-writer-wins backup this preserves statkeepers' independent taps.
     try {
       const remoteOps=await fetchSheetOps(supabase,team.id);
       state=await mutateState(latest=>applySheetOps(latest,remoteOps));
     } catch(error) {
-      if(!/sheet_stat_ops|relation .* does not exist|Could not find the table/i.test(error.message||''))throw error;
+      if(!isMissingOptionalCloudRead(error,'sheet_stat_ops'))throw error;
       console.warn('Interactive stat sheet migration is not applied yet.',error);
     }
 
@@ -236,8 +252,9 @@ export async function syncFullActiveTeam(){
 
     if(role==='owner'){
       const {owner_id,...teamUpdate}=localTeamToCloud(team,user.id,logoPath);
-      const {error:teamUpdateError}=await supabase.from('teams').update(teamUpdate).eq('id',team.id);
-      if(teamUpdateError) throw teamUpdateError;
+      await writeWithSchemaFallback('teams',teamUpdate,
+        payload=>supabase.from('teams').update(payload).eq('id',team.id),
+        fields=>recordSkipped(omitted,'teams',fields));
     }
 
     if(playerRows.length){
@@ -247,7 +264,7 @@ export async function syncFullActiveTeam(){
 
     const games=(state.games||[]).filter(g=>g.teamId===team.id);
     const matchRows=games.map(g=>localMatchToCloud(g,user.id));
-    await reconcileIdTable(supabase,'matches',team.id,matchRows,'id');
+    await reconcileIdTable(supabase,'matches',team.id,matchRows,'id',omitted);
 
     const setRows=games.flatMap(gameSetRows);
     const lineupRows=games.flatMap(g=>gameLineupRows(g,user.id));
@@ -291,7 +308,10 @@ export async function syncFullActiveTeam(){
     if(snapshotError) throw snapshotError;
 
     const adjustmentCount=localEvents.filter(e=>e.kind==='season_adjustment').length;
-    return {message:`Full sync complete: ${localPlayers.length} players, ${games.length} matches, ${setRows.length} sets, ${subRows.length} substitutions, ${statRows.length} match stat events, and ${adjustmentCount} season adjustments are backed up.`,teamId:team.id};
+    const skippedNote=omitted.size
+      ? ' Compatibility mode: '+[...omitted].join(', ')+' are missing in Supabase, so those optional fields were kept in the full cloud snapshot instead. Apply the Club migrations to store them as columns.'
+      : '';
+    return {message:`Full sync complete: ${localPlayers.length} players, ${games.length} matches, ${setRows.length} sets, ${subRows.length} substitutions, ${statRows.length} match stat events, and ${adjustmentCount} season adjustments are backed up.`+skippedNote,teamId:team.id,skippedColumns:[...omitted]};
   }catch(e){
     console.error('Full cloud sync failed',e);
     throw new Error(describeSyncError(e));
@@ -379,7 +399,9 @@ export async function restoreCloudTeam(teamId){
       restored={team:snap.team,players:snap.players,games:snap.games,events:snap.events};
     }
 
-    Object.assign(restored.team,{id:normalized.team.id,name:normalized.team.name,school:normalized.team.school,level:normalized.team.level,season:normalized.team.season,teamType:normalized.team.teamType});
+    Object.assign(restored.team,{id:normalized.team.id,name:normalized.team.name,school:normalized.team.school,level:normalized.team.level,season:normalized.team.season,
+      // An older teams table has no team_type; keep the snapshot's club setting.
+      teamType:Object.hasOwn(normalized.teamRow,'team_type')?normalized.team.teamType:(restored.team.teamType||'school')});
 
     if(normalized.teamRow.logo_path){
       try{restored.team.logo=await downloadImage(supabase,normalized.teamRow.logo_path);}catch(e){console.warn('Team logo restore failed',e);}
@@ -407,7 +429,7 @@ export async function restoreCloudTeam(teamId){
       const remoteOps=await fetchSheetOps(supabase,teamId);
       applySheetOps(state,[...remoteOps,...(state.sheetPendingOps||[])]);
     } catch(error) {
-      if(!/sheet_stat_ops|relation .* does not exist|Could not find the table/i.test(error.message||''))throw error;
+      if(!isMissingOptionalCloudRead(error,'sheet_stat_ops'))throw error;
       console.warn('Sheet event log unavailable during restore.',error);
     }
     state.activeTeamId=teamId;
@@ -447,7 +469,8 @@ export async function refreshActiveTeamFromCloud(expectedTeamId) {
 
     const {data:backup, error:backupError} = await supabase.from('team_snapshots')
       .select('snapshot').eq('team_id',team.id).maybeSingle();
-    if (backupError) throw backupError;
+    const backupUnavailable=!!backupError && isMissingOptionalCloudRead(backupError,'team_snapshots');
+    if (backupError && !backupUnavailable) throw backupError;
     const snap = backup?.snapshot;
     // A full sync preserves complete stat details and film corrections.
     // Fall back to normalized tables if the first full backup has not run.
@@ -461,7 +484,7 @@ export async function refreshActiveTeamFromCloud(expectedTeamId) {
     try {
       ops = await fetchSheetOps(supabase,team.id);
     } catch(error) {
-      if (!/sheet_stat_ops|relation .* does not exist|Could not find the table/i.test(error.message || '')) throw error;
+      if (!isMissingOptionalCloudRead(error,'sheet_stat_ops')) throw error;
       liveOpsUnavailable = true;
       console.warn('Cloud stat-sheet operation history unavailable.',error);
     }
@@ -489,7 +512,8 @@ export async function refreshActiveTeamFromCloud(expectedTeamId) {
     const notes = [];
     if (report.conflicts) notes.push(report.conflicts + ' existing local records were preserved instead of overwritten.');
     if (report.pending) notes.push(report.pending + ' stat-sheet edits are still waiting to upload.');
-    if (liveOpsUnavailable) notes.push('Live stat-sheet history was unavailable; only the published backup was checked.');
+    if (liveOpsUnavailable) notes.push('Live stat-sheet history is unavailable on this database; only saved team data was checked.');
+    if (backupUnavailable) notes.push('Full team snapshots are unavailable; refreshed from normalized cloud records only.');
     return {teamId:team.id, message:[summary,...notes].join(' ')};
   } catch(error) {
     console.error('Update Team failed',error);
