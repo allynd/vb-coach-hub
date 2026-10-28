@@ -310,7 +310,12 @@ export async function syncFullActiveTeam(){
 
     const adjustmentCount=localEvents.filter(e=>e.kind==='season_adjustment').length;
     const skippedNote=omitted.size
-      ? ' Compatibility mode: '+[...omitted].join(', ')+' are missing in Supabase, so those optional fields were kept in the full cloud snapshot instead. Apply the Club migrations to store them as columns.'
+      ? ' Compatibility mode: '+[...omitted].join(', ')+
+        ' could not be stored in normalized Supabase records, but their original values were preserved in the full cloud snapshot.'+
+        (omitted.has('matches.conference_type (postseason)')
+          ? ' Apply the School Post Season migration for permanent playoff classification support.' : '')+
+        ([...omitted].some(field=>field==='teams.team_type'||field==='matches.event_name'||field==='matches.event_round')
+          ? ' Apply the Club migrations for optional tournament fields.' : '')
       : '';
     return {message:`Full sync complete: ${localPlayers.length} players, ${games.length} matches, ${setRows.length} sets, ${subRows.length} substitutions, ${statRows.length} match stat events, and ${adjustmentCount} season adjustments are backed up.`+skippedNote,teamId:team.id,skippedColumns:[...omitted]};
   }catch(e){
