@@ -18,7 +18,9 @@ test('watch, verify, reload and remove preserve match scores and evidence',async
   let s=await state(page);expect(s.sheetPendingOps).toHaveLength(1);expect(s.events[0].film.start).toBe(277);expect(s.events[0].scoreImpact).toBe(0);expect(s.games[0].sets).toEqual(seed.games[0].sets);
   await page.reload();await page.getByRole('button',{name:'Film Analysis',exact:true}).click();
   await expect(page.getByRole('button',{name:'Verify & add stat',exact:true})).toHaveCount(0);
-  await page.evaluate(async()=>{const {mutateState}=await import('/db.js');const {applySheetOps}=await import('/sheet-ops.mjs');await mutateState(s=>applySheetOps(s,[{action:'delete',event_id:s.events[0].id}]));});
+  await page.getByRole('button',{name:'Remove verified stat',exact:true}).click();
+  await expect.poll(async()=>(await state(page)).events.length).toBe(0);
+  expect((await state(page)).sheetPendingOps.map(o=>o.action)).toEqual(['add','delete']);
   await page.reload();await page.getByRole('button',{name:'Film Analysis',exact:true}).click();
   expect((await state(page)).events).toHaveLength(0);
   await expect(page.getByRole('button',{name:'Verify & add stat',exact:true})).toHaveCount(0);

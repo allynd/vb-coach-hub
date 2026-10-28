@@ -1,13 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateFilm,approveFilm} from '../film-analysis-core.mjs';
+import {validateFilm,approveFilm,removeFilm} from '../film-analysis-core.mjs';
 import {applySheetOps} from '../sheet-ops.mjs';
 const input=()=>({schemaVersion:1,videoId:'ugW5_-zfJKY',model:'test',candidates:[{id:'r1',start:277,end:290,confidence:0.4,type:'dig'}]});
 const state=()=>({activeTeamId:'t',players:[{id:'p',teamId:'t'},{id:'other',teamId:'other'}],games:[{id:'g',teamId:'t',complete:true,sets:[{set:1,home:25,away:20}],rosterSnapshot:['p']}],events:[]});
-const candidate=()=>({...input().candidates[0],playerId:'p',set:1});
+const candidate=()=>({...input().candidates[0],playerId:'p',set:1,note:'Reviewed test'});
 test('imports never trust approval or roster identity from model output',()=>{const v=input();Object.assign(v.candidates[0],{status:'approved',playerId:'p'});const result=validateFilm(v);assert.equal(result.candidates[0].status,'pending');assert.equal(result.candidates[0].playerId,'');});
 test('reject malformed timestamps, confidence and duplicate IDs',()=>{for(const update of [{start:-1},{end:1},{confidence:2},{confidence:'0.9'}]){const v=input();Object.assign(v.candidates[0],update);assert.throws(()=>validateFilm(v));}const v=input();v.candidates.push({...v.candidates[0]});assert.throws(()=>validateFilm(v));});
 test('approval preserves scores and completed status, queues evidence with stat',()=>{const s=state(),before=structuredClone(s.games);const e=approveFilm(s,'g',input(),candidate(),()=> 'op1');assert.deepEqual(s.games,before);assert.equal(e.scoreImpact,0);assert.equal(e.film.start,277);assert.equal(s.sheetPendingOps.length,1);assert.equal(s.events.length,1);});
 test('reject cross-team, unknown action, unknown set, and unassigned player',()=>{for(const update of [{playerId:'other'},{playerId:''},{type:'rally'},{set:2}])assert.throws(()=>approveFilm(state(),'g',input(),{...candidate(),...update},()=> 'op'));const s=state();s.activeTeamId='other';assert.throws(()=>approveFilm(s,'g',input(),candidate(),()=> 'op'));});
 test('reapproval and removed candidate cannot recreate duplicate stats',()=>{const s=state();const e=approveFilm(s,'g',input(),candidate(),()=> 'op1');assert.throws(()=>approveFilm(s,'g',input(),candidate(),()=> 'op2'));applySheetOps(s,[{action:'delete',event_id:e.id}]);assert.equal(s.events.length,0);assert.throws(()=>approveFilm(s,'g',input(),candidate(),()=> 'op3'));applySheetOps(s,s.sheetPendingOps);assert.equal(s.events.length,0);});
 test('opponent missed serve needs no player and stays score-neutral',()=>{const e=approveFilm(state(),'g',input(),{...candidate(),type:'opp_serve_error',playerId:''},()=> 'op');assert.equal(e.playerId,null);assert.equal(e.scoreImpact,0);});
+
+test('removal queues a matching delete, preserves scores and survives replay on another device',()=>{
+ const s=state(),before=structuredClone(s.games);const e=approveFilm(s,'g',input(),candidate(),()=> 'add');
+ const other=state();applySheetOps(other,JSON.parse(JSON.stringify(s.sheetPendingOps)));assert.deepEqual(other.events[0].film,e.film);
+ removeFilm(s,'g',input(),candidate(),()=> 'delete');assert.equal(s.events.length,0);assert.deepEqual(s.games,before);
+ applySheetOps(other,JSON.parse(JSON.stringify(s.sheetPendingOps)));assert.equal(other.events.length,0);
+ applySheetOps(other,[s.sheetPendingOps[0]]);assert.equal(other.events.length,0);
+ assert.throws(()=>removeFilm(s,'g',input(),candidate(),()=> 'again'));assert.equal(s.sheetPendingOps.length,2);
+});
+test('film removal cannot change another team or unrelated event',()=>{
+ const s=state();approveFilm(s,'g',input(),candidate(),()=> 'add');s.activeTeamId='other';
+ assert.throws(()=>removeFilm(s,'g',input(),candidate(),()=> 'delete'));assert.equal(s.events.length,1);
+ s.activeTeamId='t';delete s.events[0].film;
+ assert.throws(()=>removeFilm(s,'g',input(),candidate(),()=> 'delete'));assert.equal(s.events.length,1);
+});

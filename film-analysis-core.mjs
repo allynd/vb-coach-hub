@@ -34,3 +34,15 @@ export function approveFilm(state,gameId,film,candidate,createId,now=new Date().
   (state.sheetPendingOps ||= []).push(op);
   return event;
 }
+
+export function removeFilm(state,gameId,film,candidate,createId){
+  const game=state.games?.find(g=>g.id===gameId&&g.teamId===state.activeTeamId);
+  if(!game)throw Error('Select a match on the active team.');
+  const id=`film_${game.id}_${film.videoId}_${candidate.id}`;
+  const event=state.events?.find(e=>e.id===id&&e.gameId===game.id&&e.teamId===game.teamId&&e.film?.candidateId===candidate.id&&e.film?.videoId===film.videoId);
+  if(!event)throw Error('This verified stat was already removed or is unavailable.');
+  const op={id:createId(),team_id:game.teamId,match_id:game.id,event_id:id,action:'delete',payload:{event}};
+  applySheetOps(state,[op]);
+  (state.sheetPendingOps ||= []).push(op);
+  return event;
+}

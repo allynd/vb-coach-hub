@@ -14,7 +14,7 @@ Based on repository main `0155a24` (Coach Hub v15.43). This branch adds a review
 
 Film Analysis opens from the header without changing existing navigation or Game Day scoring. Select an existing match, import worker `analysis.json` or add a manual observation, follow its YouTube timestamp, correct seconds/action/set/player, then approve one stat or reject. Approval is explicit; JSON imports cannot approve themselves or assign roster identities.
 
-Approved observations become the existing `kind: stat`, `source: stat_sheet`, `correction: true`, `scoreImpact: 0` events. They use the existing `sheetPendingOps` queue and append-only Supabase `sheet_stat_ops` pathway. Open Stat Sheets / Sync to upload; cloud authentication, permissions, errors and retries remain managed by the existing sheets UI. Scores and completed status remain unchanged. Existing stat sheet / match editors can remove approved observations; tombstones prevent re-creation of the same candidate.
+Approved observations become the existing `kind: stat`, `source: stat_sheet`, `correction: true`, `scoreImpact: 0` events. They use the existing `sheetPendingOps` queue and append-only Supabase `sheet_stat_ops` pathway. Open Stat Sheets / Sync to upload; cloud authentication, permissions, errors and retries remain managed by the existing sheets UI. Scores and completed status remain unchanged. Film Analysis provides Remove verified stat to queue a matching delete; tombstones prevent re-creation of the same candidate.
 
 Stable event identity is match + video + candidate ID. This prevents repeated approval of the same imported candidate, **not** semantic duplicates against courtside events or another detector run. The reviewer must compare existing stats. A rally proposal is not automatically a stat; a reviewer must identify one specific action. Add separate manual observations for additional actions.
 
@@ -49,7 +49,7 @@ Ball-visible intervals separated by >2 seconds generate **unscored review propos
 - New JS tests: malformed imports, untrusted approval state, score-neutral approval, roster/team/set validation, repeated approval, delete tombstones, opponent missed serves.
 - Python tests: empty detections, gap segmentation, source-time offsets, isolated detection rejection.
 - Synthetic and real uploaded-sample FFmpeg probe/clip tests pass. The 60-second real sample decodes without errors, contains 1800 video frames at 30 fps, and maps input time zero to original-video second 277. This validates file handling, not AI accuracy.
-- All 45 JavaScript tests pass, including the DOM/IndexedDB review integration. Fixed existing cloud-schema test assertions to check thrown plain-object error fields.
+- All 47 JavaScript tests pass, including the DOM/IndexedDB review integration. Fixed existing cloud-schema test assertions to check thrown plain-object error fields.
 - No real GPU inference yet. The existing authenticated Supabase add/delete path passed; the film UI itself has not been deployed for a complete live end-to-end test.
 
 Next: label rally boundaries and ball visibility in the supplied sample by hand; measure boundary precision/recall and ball misses; establish court/overlay masks; audit track switches before roster mapping. Only then add action classification and validate each stat category against coach labels. Require a separate completed-match round-trip test (approve, sync, second-device read, remove, replay) before release.
@@ -75,10 +75,12 @@ Each Film Analysis row now has a formatted timestamp button, e.g. **4:37–4:47*
 
 The review player also accepts a local video via a browser file picker; bytes are not uploaded. For the supplied 4:37–5:37 sample, set **Original-video start of local file** to **277** seconds. Clicking original timestamp 4:37 seeks local time 0:00. Out-of-range moments are rejected rather than silently clamped to an unrelated play. Closing the review pauses local video and removes embedded playback. The local-file selection is temporary and must be repeated after reloading the app.
 
-Five new playback tests cover formatting, lead-in, local-offset conversion, duration bounds, and validated embed URLs. Combined film/playback tests: 11 passing. Embedded YouTube and local playback still require browser acceptance testing before release; this remains on draft PR #8, not the live app.
+Five new playback tests cover formatting, lead-in, local-offset conversion, duration bounds, and validated embed URLs. Combined film/playback tests: 11 passing. Two Chromium browser tests passed, including native local MP4 playback. Actual embedded YouTube still requires acceptance testing; this remains on draft PR #8, not the live app.
 
 ## Authenticated sync test — 2026-10-28
 
 Created `Film Analysis QA 2026-10-28` with an empty roster and a `QA ONLY - Sync round trip` completed match (1–0). An opponent missed serve added through existing Stat Sheets reached `public.sheet_stat_ops` with scoreImpact 0. A read-only SQL query verified the add, then the delete for the same event after Undo. Reloading retained the deletion and original match result. Raiders was restored as the active team; its records were untouched. The clearly labeled QA team and audit operations remain.
 
 This verifies the cloud transport reused by Film Analysis, not a deployed film-to-cloud round trip or second-device read. The isolated DOM test exercises timestamp click without approval, one verified event/queued operation, preserved scores, and playback cleanup. Browser CI adds reload, deletion replay and native local-video playback with a synthetic clip; external YouTube is mocked, so actual embed availability still needs live acceptance.
+
+Removal is now available on every existing verified film event. It queues the same append-only delete operation used by Stat Sheets and retains a tombstone, so replay cannot restore the event. A corrected stat requires a new observation. Cross-team and unrelated-event removal are rejected. Browser coverage uses the actual Remove verified stat button.
