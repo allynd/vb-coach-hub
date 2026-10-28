@@ -20,7 +20,7 @@ Stable event identity is match + video + candidate ID. This prevents repeated ap
 
 Evidence includes absolute video timestamps, detector confidence (nullable/unscored), model, candidate ID and review time in the event's `film` metadata. This survives `sheet_stat_ops.payload` and the existing full-team safety snapshot. The normalized `stat_events` projection does not have evidence columns. Drafts live on `game.filmReview`, persist offline and are included in full-team snapshots, but draft reviews are not a multi-writer collaboration mechanism. Export reviews before switching devices; sync the full team for draft backup. Approved events use the existing collaborative operation log.
 
-No database migration is required for this milestone. Repository SQL and adapters were inspected; the live Supabase schema/RLS configuration and an authenticated cloud round trip were **not** tested. No production statistics or database schema were changed.
+No database migration is required for this milestone. Repository SQL and adapters were inspected; the authenticated existing stat-sheet transport was tested on 2026-10-28 using an isolated QA team (see below). No Raiders statistics or database schema were changed.
 
 ## Local Windows / RTX 3090 worker
 
@@ -49,8 +49,8 @@ Ball-visible intervals separated by >2 seconds generate **unscored review propos
 - New JS tests: malformed imports, untrusted approval state, score-neutral approval, roster/team/set validation, repeated approval, delete tombstones, opponent missed serves.
 - Python tests: empty detections, gap segmentation, source-time offsets, isolated detection rejection.
 - Synthetic and real uploaded-sample FFmpeg probe/clip tests pass. The 60-second real sample decodes without errors, contains 1800 video frames at 30 fps, and maps input time zero to original-video second 277. This validates file handling, not AI accuracy.
-- Existing baseline: 31/33 JS tests pass. Two cloud-schema-compat tests already fail because assert.rejects regex compares a thrown plain object to `[object Object]`; unrelated to film changes.
-- No real GPU inference or authenticated Supabase write test yet. Do not merge/deploy as production-ready.
+- All 45 JavaScript tests pass, including the DOM/IndexedDB review integration. Fixed existing cloud-schema test assertions to check thrown plain-object error fields.
+- No real GPU inference yet. The existing authenticated Supabase add/delete path passed; the film UI itself has not been deployed for a complete live end-to-end test.
 
 Next: label rally boundaries and ball visibility in the supplied sample by hand; measure boundary precision/recall and ball misses; establish court/overlay masks; audit track switches before roster mapping. Only then add action classification and validate each stat category against coach labels. Require a separate completed-match round-trip test (approve, sync, second-device read, remove, replay) before release.
 
@@ -76,3 +76,9 @@ Each Film Analysis row now has a formatted timestamp button, e.g. **4:37–4:47*
 The review player also accepts a local video via a browser file picker; bytes are not uploaded. For the supplied 4:37–5:37 sample, set **Original-video start of local file** to **277** seconds. Clicking original timestamp 4:37 seeks local time 0:00. Out-of-range moments are rejected rather than silently clamped to an unrelated play. Closing the review pauses local video and removes embedded playback. The local-file selection is temporary and must be repeated after reloading the app.
 
 Five new playback tests cover formatting, lead-in, local-offset conversion, duration bounds, and validated embed URLs. Combined film/playback tests: 11 passing. Embedded YouTube and local playback still require browser acceptance testing before release; this remains on draft PR #8, not the live app.
+
+## Authenticated sync test — 2026-10-28
+
+Created `Film Analysis QA 2026-10-28` with an empty roster and a `QA ONLY - Sync round trip` completed match (1–0). An opponent missed serve added through existing Stat Sheets reached `public.sheet_stat_ops` with scoreImpact 0. A read-only SQL query verified the add, then the delete for the same event after Undo. Reloading retained the deletion and original match result. Raiders was restored as the active team; its records were untouched. The clearly labeled QA team and audit operations remain.
+
+This verifies the cloud transport reused by Film Analysis, not a deployed film-to-cloud round trip or second-device read. The isolated DOM test exercises timestamp click without approval, one verified event/queued operation, preserved scores, and playback cleanup. Browser CI adds reload, deletion replay and native local-video playback with a synthetic clip; external YouTube is mocked, so actual embed availability still needs live acceptance.
