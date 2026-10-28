@@ -30,11 +30,19 @@ def candidate_windows(times, offset, gap=2.0, minimum=1.0):
             for a, b in spans if b-a >= minimum]
 
 
+def timeline_offset(source_offset, start):
+    """Map input-file time zero and extraction start to original-video seconds."""
+    if not all(math.isfinite(x) and x >= 0 for x in (source_offset, start)):
+        raise ValueError('Source offset and start must be finite, nonnegative seconds')
+    return source_offset + start
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('video', type=Path)
     p.add_argument('--video-id', required=True)
-    p.add_argument('--start', type=float, default=277)
+    p.add_argument('--start', type=float, default=0, help='Extraction start within this input file')
+    p.add_argument('--source-offset', type=float, default=0, help='Original video timestamp at input-file time zero; 277 for the uploaded 4:37 clip')
     p.add_argument('--seconds', type=float, default=60)
     p.add_argument('--out', type=Path, default=Path('film-output'))
     p.add_argument('--weights', type=Path, help='Optional locally supplied trusted Ultralytics model weights')
@@ -48,15 +56,20 @@ def main():
         p.error('Supply a locally downloaded video file')
     if not all(math.isfinite(x) for x in [args.start, args.seconds]) or args.start < 0 or not 0 < args.seconds <= 300:
         p.error('Start must be nonnegative; sample duration must be 1–300 seconds')
+    try:
+        offset = timeline_offset(args.source_offset, args.start)
+    except ValueError as error:
+        p.error(str(error))
     meta = probe(args.video)
     if args.start >= meta['duration']:
         p.error('Start exceeds video duration')
     args.out.mkdir(parents=True, exist_ok=True)
     clip = args.out / 'sample.mp4'
     # Exact decode/re-encode avoids keyframe-dependent copy timestamps. No audio needed.
-    subprocess.run(['ffmpeg', '-nostdin', '-n', '-ss', str(args.start), '-i', str(args.video), '-t', str(args.seconds), '-map', '0:v:0', '-an', '-c:v', 'libx264', '-crf', '18', '-preset', 'fast', str(clip)], check=True)
+    subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-n', '-ss', str(args.start), '-i', str(args.video), '-t', str(args.seconds), '-map', '0:v:0', '-an', '-c:v', 'libx264', '-crf', '18', '-preset', 'fast', str(clip)], check=True)
     output = {'schemaVersion': 1, 'videoId': args.video_id, 'model': 'probe-only',
-              'source': meta, 'sample': probe(clip), 'sampleOffset': args.start,
+              'source': meta, 'sample': probe(clip), 'sampleOffset': offset,
+              'sourceOffset': args.source_offset, 'inputStart': args.start,
               'candidates': [], 'limitations': ['No action classifier or automatic roster identity yet.']}
     if args.weights:
         import cv2
@@ -94,10 +107,10 @@ def main():
                                            'confidence': float(boxes.conf[i].item()), 'xyxy': boxes.xyxy[i].cpu().tolist()})
                         if cls == args.ball_class:
                             ball_times.append(index/fps)
-                track_file.write(json.dumps({'time': args.start+index/fps, 'detections': detections})+'\n')
+                track_file.write(json.dumps({'time': offset+index/fps, 'detections': detections})+'\n')
                 index += 1
         cap.release()
-        output['candidates'] = candidate_windows(ball_times, args.start)
+        output['candidates'] = candidate_windows(ball_times, offset)
         output['limitations'].extend(['Person tracks include bench, officials and spectators until court masking is calibrated.',
                                      'Sports-ball detector confidence is not volleyball-stat accuracy.',
                                      'Ball visibility windows may merge or split rallies; point winners are unknown.'])

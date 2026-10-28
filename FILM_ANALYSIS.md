@@ -8,7 +8,7 @@ Based on repository main `0155a24` (Coach Hub v15.43). This branch adds a review
 - Studio duration 1:08:32; playback duration 4111.3448 seconds (1:08:31). Playback offers 1080p, 720p, 360p and 144p. The video element at 1080p reports 1920×1080. Original upload bitrate/frame rate are not verified.
 - Viewed gameplay around 4:37–5:00. Elevated oblique sideline view; bench/coaches and officials in foreground; net and players overlap; large bottom score overlay covers part of image. Full-court coverage throughout the recording has not been established.
 - Suitable for assisted review and a detection experiment. Reliable ball/contact tracking, jersey reading, point winner and full statistics require labeled footage validation. Do not infer accuracy from screenshot clarity or detection confidence.
-- Studio owner Download is available, but the redirect was blocked by Chrome (`ERR_BLOCKED_BY_CLIENT`). No gameplay MP4 was obtained in this session. No bypass attempted. Need the owner download completed locally, or original recording, to validate the worker.
+- Initial owner download was blocked by Chrome. A separate private 4:37–5:37 clip was subsequently created through Studio and uploaded by the user. The real sample has now been inspected and used for the probe/extraction milestone; detector inference is still untested.
 
 ## App integration and persistence
 
@@ -48,8 +48,23 @@ Ball-visible intervals separated by >2 seconds generate **unscored review propos
 
 - New JS tests: malformed imports, untrusted approval state, score-neutral approval, roster/team/set validation, repeated approval, delete tombstones, opponent missed serves.
 - Python tests: empty detections, gap segmentation, source-time offsets, isolated detection rejection.
-- Synthetic FFmpeg probe/clip smoke test validates file plumbing only, not gameplay or AI.
+- Synthetic and real uploaded-sample FFmpeg probe/clip tests pass. The 60-second real sample decodes without errors, contains 1800 video frames at 30 fps, and maps input time zero to original-video second 277. This validates file handling, not AI accuracy.
 - Existing baseline: 31/33 JS tests pass. Two cloud-schema-compat tests already fail because assert.rejects regex compares a thrown plain object to `[object Object]`; unrelated to film changes.
 - No real GPU inference or authenticated Supabase write test yet. Do not merge/deploy as production-ready.
 
-Next: obtain the real 60-second sample; label rally boundaries and ball visibility by hand; measure boundary precision/recall and ball misses; establish court/overlay masks; audit track switches before roster mapping. Only then add action classification and validate each stat category against coach labels. Require a separate completed-match round-trip test (approve, sync, second-device read, remove, replay) before release.
+Next: label rally boundaries and ball visibility in the supplied sample by hand; measure boundary precision/recall and ball misses; establish court/overlay masks; audit track switches before roster mapping. Only then add action classification and validate each stat category against coach labels. Require a separate completed-match round-trip test (approve, sync, second-device read, remove, replay) before release.
+
+
+## Uploaded sample validation
+
+The user-supplied `Hastings vs Eagan - AI analysis sample - 04m37s to 05m37s.mp4` is 9,587,189 bytes, H.264 High, 1280×720, constant 30 fps / 1800 frames, 60.000 seconds of video with AAC stereo audio. This downloaded rendition is 720p even though the original playback supports 1080p. FFmpeg decoded the entire file with no reported errors.
+
+Sampled gameplay frames show the scoreboard at 0–0, briefly 1–0, then 0–1, later 0–2 and 0–3. These are observed overlay readings, not approved point outcomes. The temporary reversal means a score-OCR pipeline must handle corrections, not merely count digit changes. The opening frame already contains play, so the first rally may be truncated. Camera framing also varies within the clip; a fixed court mask needs validation across time. Net/players and foreground coaches obscure contacts and jersey numbers. No automatic or human-approved player stats were created.
+
+For this already-trimmed file use **start 0 and source offset 277**, with the original video ID. Do not seek 277 seconds into a 60-second input:
+
+```powershell
+python film-worker/analyze.py "Hastings vs Eagan - AI analysis sample - 04m37s to 05m37s.mp4" --video-id ugW5_-zfJKY --start 0 --source-offset 277 --seconds 60 --out film-output-sample
+```
+
+For local inference append `--weights "C:\Models\detector.pt" --device 0`, using a new output directory. Extraction defaults now start at zero; full-recording commands above explicitly retain `--start 277`. `sampleOffset` is the original-video offset (source offset + extraction start). Both track timestamps and candidate windows use that same mapping. Five Python tests pass, including equivalent mapping for a full recording and pre-trimmed clip and rejection of negative/non-finite offsets.
