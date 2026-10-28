@@ -16,7 +16,8 @@ export function createFilmPlayer() {
   function stop(){video.pause();frame.removeAttribute('src');frame.hidden=true;}
   function clear(){stop();video.removeAttribute('src');video.load();video.hidden=true;if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=null;file.value='';}
   file.onchange=()=>{const selected=file.files[0];if(!selected)return;clear();objectUrl=URL.createObjectURL(selected);video.src=objectUrl;video.hidden=false;status.textContent='Local video selected. Set its original-video offset, then click a stat timestamp.';};
-  root.querySelector('[data-youtube]').onclick=()=>{clear();status.textContent='YouTube selected. Click a timestamp to play.';};
+  function loadYouTube(){if(!videoId)return;clear();frame.src=`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&playsinline=1`;frame.hidden=false;external.href=`https://www.youtube.com/watch?v=${videoId}`;external.hidden=false;status.textContent='Video loaded. Press Play if needed. Add a manual observation or import analysis results to review stats; loading a video does not run AI analysis.';}
+  root.querySelector('[data-youtube]').onclick=loadYouTube;
   video.ontimeupdate=()=>{if(video.currentTime>=stopAt)video.pause();};
   video.onerror=()=>{status.textContent='This local video could not be decoded. Choose an MP4 or use YouTube.';};
   async function watch(film,candidate){
@@ -32,5 +33,5 @@ export function createFilmPlayer() {
     }catch(error){status.textContent=error.message;}
     root.scrollIntoView({block:'nearest',behavior:'smooth'});
   }
-  return {root,watch,stop,setVideo(id){if(videoId!==id){clear();offset.value='0';external.hidden=true;status.textContent='Choose a timestamp. For the 4:37 sample, set the local-file offset to 277.';videoId=id;}}};
+  return {root,watch,stop,loadYouTube,setVideo(id){if(videoId!==id){clear();offset.value='0';external.hidden=true;status.textContent='Choose a timestamp. For the 4:37 sample, set the local-file offset to 277.';videoId=id;}}};
 }

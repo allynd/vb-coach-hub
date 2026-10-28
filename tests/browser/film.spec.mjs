@@ -38,3 +38,23 @@ test('native local MP4 plays with trimmed-file offset; closing pauses it',async(
   await page.getByRole('button',{name:'Close',exact:true}).click();
   await expect.poll(()=>page.locator('video').evaluate(v=>v.paused)).toBe(true);
 });
+
+test('Use YouTube immediately displays video; URL changes cannot relabel existing evidence',async({page})=>{
+ await page.getByRole('button',{name:'Use YouTube',exact:true}).click();
+ await expect(page.locator('iframe')).toBeVisible();
+ await expect(page.locator('iframe')).toHaveAttribute('src',/embed\/ugW5_-zfJKY\?autoplay=1/);
+ await page.getByLabel('YouTube video URL',{exact:true}).fill('https://youtu.be/9DrweF2pkTc');
+ await page.getByRole('button',{name:'Load YouTube video',exact:true}).click();
+ await expect(page.getByText('This match already has observations for another video. Select another match to keep its evidence intact.',{exact:true})).toBeVisible();
+ expect((await state(page)).games[0].filmReview.videoId).toBe('ugW5_-zfJKY');
+});
+test('URL loading works before any observation exists',async({page})=>{
+ await page.getByRole('button',{name:'Close',exact:true}).click();
+ await page.evaluate(async()=>{const {mutateState}=await import('/db.js');await mutateState(s=>{delete s.games[0].filmReview;return s;});});
+ await page.getByRole('button',{name:'Film Analysis',exact:true}).click();
+ await page.getByLabel('YouTube video URL',{exact:true}).fill('https://youtu.be/9DrweF2pkTc');
+ await page.getByRole('button',{name:'Load YouTube video',exact:true}).click();
+ await expect(page.locator('iframe')).toBeVisible();
+ await expect(page.locator('iframe')).toHaveAttribute('src',/embed\/9DrweF2pkTc/);
+ const s=await state(page);expect(s.games[0].filmReview.candidates).toHaveLength(0);expect(s.events).toHaveLength(0);
+});
