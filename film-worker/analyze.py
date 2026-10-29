@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 import re
 import subprocess
+from diagnostics import exclusion_rect, annotate_exclusions, Coverage, precision_options, render_preview
 
 
 def probe(path):
@@ -49,7 +50,18 @@ def main():
     p.add_argument('--device', default='0', help='CUDA GPU index (0 for RTX 3090); cpu is explicit testing only')
     p.add_argument('--person-class', type=int, default=0)
     p.add_argument('--ball-class', type=int, default=32, help='COCO sports ball; override for a volleyball-specific model')
+    p.add_argument('--raw-detections', action='store_true', help='Bypass tracker association to audit detector outputs; no track identities')
+    p.add_argument('--imgsz', type=int, default=1280)
+    p.add_argument('--confidence', type=float, default=0.15)
+    p.add_argument('--ball-exclude-rect', type=exclusion_rect, action='append', default=[], help='Reviewed background region x1,y1,x2,y2 in source pixels; specific to this camera view')
+    p.add_argument('--preview', action='store_true', help='Encode review.mp4 with detection boxes after inference')
     args = p.parse_args()
+    if args.imgsz < 32 or not math.isfinite(args.confidence) or not 0 < args.confidence <= 1:
+        p.error('Image size must be >=32 and confidence in (0,1]')
+    if (args.preview or args.raw_detections or args.ball_exclude_rect) and not args.weights:
+        p.error('Preview, raw detection and exclusion options require weights')
+    if args.weights and not args.weights.is_file():
+        p.error('Weights must be a local file')
     if not re.fullmatch(r'[\w-]{11}', args.video_id):
         p.error('Invalid YouTube video ID')
     if not args.video.is_file():
@@ -63,6 +75,9 @@ def main():
     meta = probe(args.video)
     if args.start >= meta['duration']:
         p.error('Start exceeds video duration')
+    for x1,y1,x2,y2 in args.ball_exclude_rect:
+        if x2 > meta['width'] or y2 > meta['height']:
+            p.error('Exclusion rectangle exceeds source dimensions')
     args.out.mkdir(parents=True, exist_ok=True)
     clip = args.out / 'sample.mp4'
     # Exact decode/re-encode avoids keyframe-dependent copy timestamps. No audio needed.
@@ -74,13 +89,21 @@ def main():
     if args.weights:
         import cv2
         import torch
+        import ultralytics
         from ultralytics import YOLO
+        from ultralytics.cfg import DEFAULT_CFG_DICT
         if not args.weights.is_file():
             p.error('Weights must be a local file')
         if args.device != 'cpu' and not torch.cuda.is_available():
             p.error('CUDA unavailable. Install CUDA-enabled PyTorch and check NVIDIA driver. No silent CPU fallback.')
         model = YOLO(str(args.weights))
         output['model'] = args.weights.name
+        output['inference'] = {'mode':'raw-detections' if args.raw_detections else 'tracked-detections',
+                               'imgsz':args.imgsz, 'confidence':args.confidence,
+                               'ballExcludeRects':args.ball_exclude_rect,
+                               'ultralytics':ultralytics.__version__, 'torch':torch.__version__}
+        coverage = Coverage(args.person_class, args.ball_class)
+        precision = precision_options(DEFAULT_CFG_DICT, args.device != 'cpu')
         output['weightsSha256'] = hashlib.file_digest(args.weights.open('rb'), 'sha256').hexdigest()
         output['device'] = 'cpu' if args.device == 'cpu' else torch.cuda.get_device_name(int(args.device))
         cap = cv2.VideoCapture(str(clip))
@@ -95,9 +118,12 @@ def main():
                 if not ok:
                     break
                 # Process every frame: fast balls are lost by aggressive frame skipping.
-                result = model.track(frame, persist=True, tracker='bytetrack.yaml', device=args.device,
-                                     half=args.device != 'cpu', imgsz=1280, conf=0.15,
-                                     classes=[args.person_class, args.ball_class], verbose=False)[0]
+                options = dict(device=args.device, imgsz=args.imgsz, conf=args.confidence,
+                               classes=[args.person_class, args.ball_class], verbose=False, **precision)
+                if args.raw_detections:
+                    result = model.predict(frame, **options)[0]
+                else:
+                    result = model.track(frame, persist=True, tracker='bytetrack.yaml', **options)[0]
                 boxes = result.boxes
                 detections = []
                 if boxes is not None:
@@ -105,11 +131,21 @@ def main():
                         cls = int(boxes.cls[i].item())
                         detections.append({'classId': cls, 'trackId': int(boxes.id[i].item()) if boxes.id is not None else None,
                                            'confidence': float(boxes.conf[i].item()), 'xyxy': boxes.xyxy[i].cpu().tolist()})
-                        if cls == args.ball_class:
-                            ball_times.append(index/fps)
+                detections = annotate_exclusions(detections, args.ball_exclude_rect, args.ball_class)
+                coverage.add(detections)
+                if any(d['classId'] == args.ball_class and not d.get('excludedReason') for d in detections):
+                    ball_times.append(index/fps)
                 track_file.write(json.dumps({'time': offset+index/fps, 'detections': detections})+'\n')
                 index += 1
+                if index % max(1, round(fps*5)) == 0:
+                    print(f'Processed {index} frames ({index/fps:.1f}s)', flush=True)
         cap.release()
+        if index == 0:
+            raise ValueError('No frames decoded for inference')
+        output['diagnostics'] = coverage.report()
+        if args.preview:
+            print('Encoding review.mp4...', flush=True)
+            render_preview(clip, args.out / 'tracks.jsonl', args.out / 'review.mp4', offset, args.ball_exclude_rect, args.ball_class)
         output['candidates'] = candidate_windows(ball_times, offset)
         output['limitations'].extend(['Person tracks include bench, officials and spectators until court masking is calibrated.',
                                      'Sports-ball detector confidence is not volleyball-stat accuracy.',
