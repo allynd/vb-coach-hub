@@ -1,0 +1,25 @@
+import { test, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+const template=await readFile(new URL('../../film-worker/benchmark.html',import.meta.url),'utf8');
+const manifest={benchmarkId:'test',width:1280,height:720,sourceOffset:277,frames:[{index:0,time:277},{index:30,time:278}]};
+const pixel='data:image/svg+xml;base64,'+Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="black"/></svg>').toString('base64');
+test('labels use source pixels and survive export/import; mismatched imports are rejected',async({page})=>{
+ await page.setContent(template.replace('/*BENCHMARK_DATA*/null',JSON.stringify({manifest,images:[pixel,pixel]})));
+ const canvas=page.locator('canvas'),box=await canvas.boundingBox();
+ await canvas.click({position:{x:box.width/2,y:box.height/2}});
+ await expect(page.locator('#status')).toContainText('visible');
+ await page.getByText('Next',{exact:true}).click();
+ await page.getByText('Uncertain',{exact:true}).click();
+ const download=page.waitForEvent('download');await page.getByText('Export labels',{exact:true}).click();
+ const saved=JSON.parse(await readFile(await (await download).path(),'utf8'));
+ expect(saved.labels[0].point[0]).toBeCloseTo(640,0);expect(saved.labels[0].point[1]).toBeCloseTo(360,0);
+ expect(saved.labels[1].state).toBe('uncertain');
+ await page.getByText('Clear label',{exact:true}).click();
+ page.once('dialog',d=>d.accept());
+ await page.locator('#import').setInputFiles({name:'labels.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(saved))});
+ await expect(page.locator('#status')).toContainText('2/2 labeled');
+ let message='';page.once('dialog',async d=>{message=d.message();await d.accept();});
+ await page.locator('#import').setInputFiles({name:'wrong.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({...saved,benchmarkId:'wrong'}))});
+ expect(message).toContain('Wrong benchmark');
+ await expect(page.locator('#status')).toContainText('2/2 labeled');
+});

@@ -1,0 +1,29 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Game ball benchmark</title>
+<style>body{font:16px system-ui;background:#101827;color:#edf2f7;margin:24px auto;max-width:1280px;padding:0 16px}button,input{font:inherit;margin:5px;padding:10px}button{cursor:pointer}canvas{width:100%;height:auto;display:block;cursor:crosshair;background:#000}p{line-height:1.5}#status{color:#6ee7b7}nav{display:flex;flex-wrap:wrap;align-items:center}</style>
+<h1>Game ball benchmark</h1><p>Click the center of the <b>game ball</b> when visible, including while held or between points. Ignore spare balls. Choose “Not visible” only when you are sure the game ball cannot be seen; use “Uncertain” otherwise. Images have no detector overlays. Labels measure detection, not rallies or statistics.</p>
+<nav><button id="previous">Previous</button><button id="next">Next</button><span id="position"></span></nav>
+<canvas id="frame"></canvas><p id="status" aria-live="polite"></p>
+<nav><button id="absent">Not visible</button><button id="uncertain">Uncertain</button><button id="clear">Clear label</button><button id="export">Export labels</button><label>Resume from labels <input type="file" id="import" accept=".json"></label></nav>
+<p>Export before closing; labels are kept in this tab only. Reopen this page and import your exported file to resume. No data is uploaded or synced to match records.</p>
+<script>
+const data=/*BENCHMARK_DATA*/null;
+const canvas=document.querySelector('#frame'),ctx=canvas.getContext('2d');
+let index=0,dirty=false,labels=new Map(),generation=0;
+canvas.width=data.manifest.width;canvas.height=data.manifest.height;
+const current=()=>data.manifest.frames[index];
+function render(){const token=++generation,f=current(),l=labels.get(f.index),img=new Image();
+img.onload=()=>{if(token!==generation)return;ctx.drawImage(img,0,0);if(l?.state==='visible'){ctx.strokeStyle='#00ff99';ctx.lineWidth=2;ctx.beginPath();ctx.arc(...l.point,12,0,Math.PI*2);ctx.stroke();}};img.src=data.images[index];
+document.querySelector('#position').textContent=`Frame ${index+1}/${data.images.length} · Original ${(f.time/60|0)}:${(f.time%60).toFixed(2).padStart(5,'0')} · Clip ${(f.time-data.manifest.sourceOffset).toFixed(2)}s`;
+document.querySelector('#status').textContent=`${l?.state||'unreviewed'} · ${labels.size}/${data.images.length} labeled${dirty?' · Unsaved changes':''}`;
+document.querySelector('#previous').disabled=index===0;document.querySelector('#next').disabled=index===data.images.length-1;}
+function mark(state,point){labels.set(current().index,{index:current().index,state,...(point?{point}:{})});dirty=true;render();}
+canvas.onclick=e=>{const r=canvas.getBoundingClientRect();mark('visible',[(e.clientX-r.left)*canvas.width/r.width,(e.clientY-r.top)*canvas.height/r.height]);};
+document.querySelector('#previous').onclick=()=>{index=Math.max(0,index-1);render();};
+document.querySelector('#next').onclick=()=>{index=Math.min(data.images.length-1,index+1);render();};
+for(const state of ['absent','uncertain'])document.getElementById(state).onclick=()=>mark(state);
+document.querySelector('#clear').onclick=()=>{labels.delete(current().index);dirty=true;render();};
+document.querySelector('#export').onclick=()=>{const blob=new Blob([JSON.stringify({benchmarkId:data.manifest.benchmarkId,labels:[...labels.values()]},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ball-labels.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);dirty=false;render();};
+document.querySelector('#import').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;const value=JSON.parse(await file.text()),allowed=new Set(data.manifest.frames.map(f=>f.index)),next=new Map();if(value.benchmarkId!==data.manifest.benchmarkId||!Array.isArray(value.labels))throw Error('Wrong benchmark');for(const l of value.labels){if(!allowed.has(l.index)||next.has(l.index)||!['visible','absent','uncertain','unreviewed'].includes(l.state))throw Error('Invalid labels');if(l.state==='visible'&&(!Array.isArray(l.point)||l.point.length!==2||!l.point.every(Number.isFinite)||l.point[0]<0||l.point[0]>=canvas.width||l.point[1]<0||l.point[1]>=canvas.height))throw Error('Invalid point');next.set(l.index,l);}if(dirty&&!confirm('Replace unsaved labels with this file?'))return;labels=next;dirty=false;render();}catch(err){alert(`Cannot import: ${err.message}`);}finally{e.target.value='';}};
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});render();
+</script></html>
